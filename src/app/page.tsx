@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTheme } from "next-themes";
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2, TrendingUp, TrendingDown, Minus, Globe,
-  Sun, Moon, PanelLeft, ChevronRight, Layers,
+  Sun, Moon, PanelLeft, ChevronRight, Layers, Settings, LogOut, ChevronUp, BarChart2, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AnalyticsCharts } from "@/components/AnalyticsCharts";
+import { WebsiteChat }    from "@/components/WebsiteChat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +49,9 @@ const LABELS: Record<Lang, Record<string, string>> = {
     networkError: "Network error — check your connection and try again.",
     analysisFailed: "Analysis failed — please try again.",
     uiLang: "Language",
+    category: "Category",
+    designStyle: "Design Style",
+    sentimentScore: "Sentiment Score",
   },
   uk: {
     title: "Аналізуйте будь-який сайт миттєво",
@@ -68,6 +73,9 @@ const LABELS: Record<Lang, Record<string, string>> = {
     networkError: "Помилка мережі — перевірте з'єднання.",
     analysisFailed: "Аналіз не вдався — спробуйте ще раз.",
     uiLang: "Мова інтерфейсу",
+    category: "Категорія",
+    designStyle: "Стиль оформлення",
+    sentimentScore: "Оцінка тональності",
   },
   de: {
     title: "Analysieren Sie jede Website sofort",
@@ -89,6 +97,9 @@ const LABELS: Record<Lang, Record<string, string>> = {
     networkError: "Netzwerkfehler — Verbindung prüfen.",
     analysisFailed: "Analyse fehlgeschlagen — erneut versuchen.",
     uiLang: "Sprache",
+    category: "Kategorie",
+    designStyle: "Designstil",
+    sentimentScore: "Stimmungswert",
   },
   fr: {
     title: "Analysez n'importe quel site instantanément",
@@ -110,6 +121,9 @@ const LABELS: Record<Lang, Record<string, string>> = {
     networkError: "Erreur réseau — vérifiez votre connexion.",
     analysisFailed: "Analyse échouée — réessayez.",
     uiLang: "Langue",
+    category: "Catégorie",
+    designStyle: "Style de conception",
+    sentimentScore: "Score de sentiment",
   },
   pl: {
     title: "Analizuj każdą stronę natychmiastowo",
@@ -131,6 +145,9 @@ const LABELS: Record<Lang, Record<string, string>> = {
     networkError: "Błąd sieci — sprawdź połączenie.",
     analysisFailed: "Analiza nie powiodła się — spróbuj ponownie.",
     uiLang: "Język",
+    category: "Kategoria",
+    designStyle: "Styl projektu",
+    sentimentScore: "Wynik sentymentu",
   },
 };
 
@@ -289,6 +306,115 @@ function ThemeToggle() {
   );
 }
 
+// ─── Sidebar profile ─────────────────────────────────────────────────────────
+
+const AVATAR_COLORS = [
+  "bg-indigo-500", "bg-violet-500", "bg-rose-500",
+  "bg-amber-500", "bg-emerald-500", "bg-cyan-500",
+];
+
+function getInitials(name: string | null | undefined): string {
+  if (!name?.trim()) return "U";
+  const parts = name.trim().split(/\s+/);
+  return parts.length >= 2
+    ? (parts[0][0] + parts[1][0]).toUpperCase()
+    : parts[0][0].toUpperCase();
+}
+
+function avatarBg(name: string | null | undefined): string {
+  const code = (name?.charCodeAt(0) ?? 0) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[code];
+}
+
+function SidebarProfile({ collapsed }: { collapsed: boolean }) {
+  const { data: session } = useSession();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [open]);
+
+  const user = session?.user;
+  const name = user?.name ?? "User";
+  const image = user?.image;
+  const initials = getInitials(user?.name);
+
+  return (
+    <div ref={ref} className="relative shrink-0 border-t border-border p-2">
+      {/* Popover menu — opens above the button */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 6, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.96 }}
+            transition={{ duration: 0.14, ease: "easeOut" }}
+            className="absolute bottom-full left-2 right-2 mb-1.5 overflow-hidden rounded-lg border border-border bg-card shadow-lg"
+          >
+            <Link
+              href="/settings"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-accent"
+            >
+              <Settings className="h-4 w-4 text-muted-foreground" />
+              Settings
+            </Link>
+            <div className="border-t border-border" />
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-destructive transition-colors hover:bg-destructive/10"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Profile trigger button */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent",
+          collapsed ? "justify-center" : "",
+        )}
+        aria-label="User menu"
+      >
+        {/* Avatar */}
+        <div className={cn(
+          "h-7 w-7 shrink-0 rounded-full overflow-hidden flex items-center justify-center text-xs font-semibold text-white",
+          !image && avatarBg(user?.name),
+        )}>
+          {image
+            ? <img src={image} alt={name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+            : initials
+          }
+        </div>
+
+        {!collapsed && (
+          <>
+            <span className="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground">
+              {name}
+            </span>
+            <ChevronUp
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-150",
+                open ? "rotate-180" : "",
+              )}
+            />
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
 // ─── Sidebar content (shared between desktop and Sheet) ───────────────────────
 
 interface SidebarContentProps {
@@ -435,32 +561,36 @@ function SidebarContent({
         )}
       </div>
 
-      {/* Guest CTA — pinned to sidebar bottom */}
-      {isGuest && !collapsed && (
-        <div className="shrink-0 border-t border-border p-3">
-          <motion.div
-            animate={{
-              boxShadow: [
-                "0 0 0 1px rgba(99,102,241,0.2)",
-                "0 0 14px 3px rgba(99,102,241,0.4)",
-                "0 0 0 1px rgba(99,102,241,0.2)",
-              ],
-            }}
-            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-            className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-muted/40 p-3"
-          >
-            <p className="mb-1 text-xs font-semibold text-foreground">Sign in to save history</p>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Analyses are not saved in guest mode.
-            </p>
-            <Link
-              href="/login"
-              className="flex h-8 w-full items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+      {/* Pinned bottom — profile (auth) or Sign-in CTA (guest) */}
+      {isGuest ? (
+        !collapsed && (
+          <div className="shrink-0 border-t border-border p-3">
+            <motion.div
+              animate={{
+                boxShadow: [
+                  "0 0 0 1px rgba(99,102,241,0.2)",
+                  "0 0 14px 3px rgba(99,102,241,0.4)",
+                  "0 0 0 1px rgba(99,102,241,0.2)",
+                ],
+              }}
+              transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+              className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-muted/40 p-3"
             >
-              Sign in
-            </Link>
-          </motion.div>
-        </div>
+              <p className="mb-1 text-xs font-semibold text-foreground">Sign in to save history</p>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Analyses are not saved in guest mode.
+              </p>
+              <Link
+                href="/login"
+                className="flex h-8 w-full items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                Sign in
+              </Link>
+            </motion.div>
+          </div>
+        )
+      ) : (
+        <SidebarProfile collapsed={collapsed} />
       )}
     </div>
   );
@@ -540,69 +670,232 @@ function ErrorBanner({ prefix, message }: { prefix: string; message: string }) {
 
 // ─── Analysis panel ───────────────────────────────────────────────────────────
 
-function AnalysisPanel({ result, lang }: { result: AnalysisResult; lang: Lang }) {
-  const t = LABELS[lang];
+// ── Sentiment score gauge ─────────────────────────────────────────────────────
+
+function SentimentGauge({ score, label }: { score: number; label: string }) {
+  const color =
+    score >= 67 ? "bg-emerald-500"
+    : score >= 34 ? "bg-amber-500"
+    : "bg-rose-500";
+
   return (
-    <div className="mt-8 space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
-          <Globe className="h-4 w-4 shrink-0" />
-          <span className="truncate font-mono text-xs">{result.url}</span>
-        </div>
-        <SentimentPill sentiment={result.sentiment} lang={lang} />
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span className="font-medium">{label}</span>
+        <span className="font-bold tabular-nums text-foreground">{score}/100</span>
       </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn("h-full rounded-full transition-all duration-700", color)}
+          style={{ width: `${score}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
-      <Tabs defaultValue="overview">
-        <TabsList className="w-full">
-          <TabsTrigger value="overview" className="flex-1">{t.overview}</TabsTrigger>
-          <TabsTrigger value="seo" className="flex-1">{t.seoKeywords}</TabsTrigger>
-        </TabsList>
+// ── Analytics modal ───────────────────────────────────────────────────────────
 
-        <TabsContent value="overview" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t.summary}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm leading-relaxed text-foreground/80">{result.summary}</p>
-            </CardContent>
-          </Card>
-          <div>
-            <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t.mainTopics}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {result.topics.map((topic) => (
-                <Badge key={topic} variant="secondary">{topic}</Badge>
-              ))}
+function AnalyticsModal({ result, onClose }: { result: AnalysisResult; onClose: () => void }) {
+  return (
+    <>
+      {/* Backdrop */}
+      <motion.div
+        key="analytics-backdrop"
+        className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      />
+      {/* Modal */}
+      <motion.div
+        key="analytics-modal"
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 16 }}
+        transition={{ duration: 0.22, ease: "easeOut" }}
+      >
+        <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-background shadow-2xl">
+          {/* Header */}
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/95 px-6 py-4 backdrop-blur-sm">
+            <div className="flex items-center gap-2">
+              <BarChart2 className="h-5 w-5 text-indigo-500" />
+              <h2 className="text-base font-bold">Detailed Analytics</h2>
             </div>
+            <button
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-        </TabsContent>
+          {/* Charts */}
+          <div className="p-6">
+            <AnalyticsCharts result={result} />
+          </div>
+        </div>
+      </motion.div>
+    </>
+  );
+}
 
-        <TabsContent value="seo" className="mt-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t.topKeywords}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+// ── Analysis panel ────────────────────────────────────────────────────────────
+
+function AnalysisPanel({
+  result,
+  lang,
+  scrapedText,
+}: {
+  result:       AnalysisResult;
+  lang:         Lang;
+  scrapedText?: string;
+}) {
+  const t = LABELS[lang];
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showChat,      setShowChat]      = useState(false);
+  const hasEnrichedData = result.sentimentScore !== undefined;
+  const canChat = !!scrapedText;
+
+  return (
+    <>
+      <div className="mt-8 space-y-5">
+
+        {/* URL + sentiment pill */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
+            <Globe className="h-4 w-4 shrink-0" />
+            <span className="truncate font-mono text-xs">{result.url}</span>
+          </div>
+          <SentimentPill sentiment={result.sentiment} lang={lang} />
+        </div>
+
+        {/* Category + design style */}
+        {(result.category || result.designStyle) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {result.category && (
+              <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-500 dark:text-blue-400 ring-1 ring-inset ring-blue-500/20">
+                {result.category}
+              </span>
+            )}
+            {result.designStyle && (
+              <span className="text-xs text-muted-foreground">
+                {result.designStyle}
+              </span>
+            )}
+          </div>
+        )}
+
+        <Tabs defaultValue="overview">
+          <TabsList className="w-full">
+            <TabsTrigger value="overview" className="flex-1">{t.overview}</TabsTrigger>
+            <TabsTrigger value="seo" className="flex-1">{t.seoKeywords}</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="mt-4 space-y-4">
+            {/* Summary */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t.summary}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm leading-relaxed text-foreground/80">{result.summary}</p>
+                {/* Sentiment score gauge — only for fresh analyses (not history rows) */}
+                {result.sentimentScore !== undefined && (
+                  <SentimentGauge score={result.sentimentScore} label={t.sentimentScore} />
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Main topics */}
+            <div>
+              <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t.mainTopics}
+              </p>
               <div className="flex flex-wrap gap-2">
-                {result.keywords.map((kw) => (
-                  <Badge key={kw} variant="outline">{kw}</Badge>
+                {result.topics.map((topic) => (
+                  <Badge key={topic} variant="secondary">{topic}</Badge>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            </div>
+          </TabsContent>
 
-      <p className="text-right text-xs text-muted-foreground/60">
-        {t.analyzed} {new Date(result.createdAt).toLocaleString()}
-      </p>
-    </div>
+          <TabsContent value="seo" className="mt-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t.topKeywords}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {result.keywords.map((kw) => (
+                    <Badge key={kw} variant="outline">{kw}</Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground/60">
+            {t.analyzed} {new Date(result.createdAt).toLocaleString()}
+          </p>
+          {/* Action buttons row */}
+          <div className="flex gap-2">
+            {hasEnrichedData && (
+              <button
+                onClick={() => setShowAnalytics(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-1.5 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-400 dark:hover:bg-indigo-950/50"
+              >
+                <BarChart2 className="h-3.5 w-3.5" />
+                Detailed Analytics
+              </button>
+            )}
+            {canChat && (
+              <button
+                onClick={() => setShowChat((v) => !v)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                  showChat
+                    ? "border-violet-400 bg-violet-50 text-violet-700 dark:border-violet-600 dark:bg-violet-950/30 dark:text-violet-300"
+                    : "border-violet-200 bg-violet-50/60 text-violet-600 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-400 dark:hover:bg-violet-950/50",
+                )}
+              >
+                💬 {showChat ? "Close Chat" : "Chat with Website"}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Inline chat panel */}
+        <AnimatePresence>
+          {showChat && scrapedText && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.28, ease: "easeInOut" }}
+              className="overflow-hidden"
+            >
+              <WebsiteChat websiteContext={scrapedText} websiteUrl={result.url} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Analytics modal */}
+      <AnimatePresence>
+        {showAnalytics && (
+          <AnalyticsModal result={result} onClose={() => setShowAnalytics(false)} />
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -610,10 +903,11 @@ function AnalysisPanel({ result, lang }: { result: AnalysisResult; lang: Lang })
 
 export default function Home() {
   // — Analyzer state
-  const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [url, setUrl]             = useState("");
+  const [loading, setLoading]     = useState(false);
+  const [result, setResult]       = useState<AnalysisResult | null>(null);
+  const [scrapedText, setScrapedText] = useState<string>("");
+  const [error, setError]         = useState<string | null>(null);
 
   // — History state
   const [history, setHistory] = useState<AnalysisResult[]>([]);
@@ -663,6 +957,7 @@ export default function Home() {
 
       if (data.success && data.data) {
         setResult(data.data);
+        setScrapedText(data.data.scrapedText ?? "");
         void fetchHistory();
       } else {
         setError(data.error ?? t.analysisFailed);
@@ -678,6 +973,7 @@ export default function Home() {
     setResult(item);
     setUrl(item.url);
     setError(null);
+    setScrapedText(""); // history items don't carry scraped text
     setMobileSheetOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -756,7 +1052,7 @@ export default function Home() {
                   transition={{ duration: 0.4, ease: "easeOut" }}
                 >
                   <div className="mx-auto max-w-2xl px-6 py-6">
-                    <AnalysisPanel result={result} lang={uiLang} />
+                    <AnalysisPanel result={result} lang={uiLang} scrapedText={scrapedText || undefined} />
                   </div>
                 </motion.div>
               )}

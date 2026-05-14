@@ -1,3 +1,6 @@
+// bcrypt uses Node.js native crypto — must not run in Edge Runtime
+export const runtime = "nodejs";
+
 import NextAuth from "next-auth";
 import { authOptions } from "@/lib/auth";
 

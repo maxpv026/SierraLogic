@@ -13,7 +13,18 @@ model User {
   email           String?          @unique
   emailVerified   DateTime?
   image           String?
-  createdAt       DateTime         @default(now())
+  jobTitle             String?
+  company              String?
+  password             String?
+  twoFactorSecret      String?
+  isTwoFactorEnabled   Boolean          @default(false)
+  // ── Stripe billing ──────────────────────────────────────────────────────────
+  stripeCustomerId         String?          @unique
+  stripeSubscriptionId     String?          @unique
+  stripePriceId            String?
+  stripeCurrentPeriodEnd   DateTime?
+  plan                     String           @default("FREE")
+  createdAt            DateTime         @default(now())
   accounts        Account[]
   sessions        Session[]
   analysisResults AnalysisResult[]
@@ -57,6 +68,15 @@ model AnalysisResult {
   user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model EmailVerificationCode {
+  id      String   @id @default(cuid())
+  email   String
+  code    String
+  expires DateTime
+
+  @@index([email])
 }
 
 model VerificationToken {

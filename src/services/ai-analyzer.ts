@@ -5,22 +5,30 @@ const MAX_INPUT_CHARS = 20_000;
 
 const VALID_SENTIMENTS = new Set<string>(["positive", "neutral", "negative"]);
 
-const SYSTEM_PROMPT = `You are an expert B2B Content & SEO Analyst. Your task is to analyze the provided webpage text and return a structured JSON object.
+const SYSTEM_PROMPT = `You are an expert B2B Content & SEO Analyst. Analyze the provided webpage text and return a strictly structured JSON object.
 
-You MUST return ONLY a valid JSON object with these EXACT fields — no extra explanation or markdown:
+Return ONLY a valid JSON object with these EXACT fields — no markdown, no explanation:
 
 {
-  "topics": [string, string, string],        // 3 to 5 main themes of the content
-  "sentiment": "positive" | "neutral" | "negative",  // overall tone of the content
-  "summary": string,                          // concise 2-sentence summary of the core message
-  "keywords": [string, ...string[]]           // top 7 SEO/contextual keywords, ordered by relevance
+  "topics":         [string, string, string],
+  "sentiment":      "positive" | "neutral" | "negative",
+  "sentimentScore": number,
+  "summary":        string,
+  "keywords":       [string, ...string[]],
+  "category":       string,
+  "designStyle":    string
 }
 
-Rules:
-- topics: between 3 and 5 strings, each ≤ 6 words, concrete and specific to the content
-- sentiment: must be exactly one of "positive", "neutral", or "negative"
-- summary: exactly 2 sentences, written for a B2B executive audience
-- keywords: exactly 7 strings, lowercase, mix of single words and short phrases`;
+Field rules:
+- topics:         3–5 strings, each ≤ 6 words, concrete and specific to the content
+- sentiment:      exactly one of "positive", "neutral", "negative"
+- sentimentScore: integer 0–100 (0 = very negative, 50 = neutral, 100 = very positive); must be consistent with the sentiment label (positive ≥ 60, neutral 35–65, negative ≤ 40)
+- summary:        exactly 2 sentences for a B2B executive audience
+- keywords:       exactly 7 strings, lowercase, mix of single words and short phrases, ordered by relevance
+- category:       ONE concise label for the site type — choose the best fit from examples like "News Platform", "E-commerce", "B2B SaaS", "Corporate Blog", "Portfolio", "Education", "Healthcare", "Government", "Real Estate", "Finance", "Tech Media", "NGO / Non-profit" — or coin a clear alternative
+- designStyle:    2–4 comma-separated adjectives describing the content style, e.g. "Minimalist, Data-heavy", "Visual-first, Long-form", "Dark mode, Typography-focused", "Corporate, Dense text"`;
+
+function clamp(n: number, min: number, max: number) { return Math.max(min, Math.min(max, n)); }
 
 function parseAndValidate(raw: string): AIAnalysis {
   let parsed: unknown;
@@ -44,43 +52,47 @@ function parseAndValidate(raw: string): AIAnalysis {
     ? (obj.sentiment as Sentiment)
     : "neutral";
 
+  const rawScore = typeof obj.sentimentScore === "number" ? obj.sentimentScore : 50;
+  const sentimentScore = clamp(Math.round(rawScore), 0, 100);
+
   const summary = typeof obj.summary === "string" ? obj.summary.trim() : "";
 
   const keywords = Array.isArray(obj.keywords)
     ? obj.keywords.filter((k): k is string => typeof k === "string").slice(0, 7)
     : [];
 
-  return { topics, sentiment, summary, keywords };
+  const category = typeof obj.category === "string" && obj.category.trim()
+    ? obj.category.trim()
+    : "General";
+
+  const designStyle = typeof obj.designStyle === "string"
+    ? obj.designStyle.trim()
+    : "";
+
+  return { topics, sentiment, sentimentScore, summary, keywords, category, designStyle };
 }
 
 export async function analyzeContent(text: string, language = "English"): Promise<AIAnalysis> {
-  // TEMPORARY DIAGNOSTIC — remove once key is confirmed working
-  const key = process.env.OPENAI_API_KEY ?? "";
-  console.log(`[ai-analyzer] key prefix="${key.slice(0, 5)}" length=${key.length}`);
-
   const input = text.length > MAX_INPUT_CHARS ? text.slice(0, MAX_INPUT_CHARS) : text;
 
   const systemPrompt =
     SYSTEM_PROMPT +
-    `\n\nIMPORTANT: Write ALL output — summary, topics, and keywords — in ${language}. Do not mix languages.`;
+    `\n\nIMPORTANT: Write ALL output — summary, topics, keywords, category, and designStyle — in ${language}. Do not mix languages.`;
 
   let raw: string | null;
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model:           "gpt-4o-mini",
       response_format: { type: "json_object" },
-      temperature: 0.2,
+      temperature:     0.2,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: input },
+        { role: "user",   content: input },
       ],
     });
 
     raw = completion.choices[0]?.message?.content ?? null;
   } catch (err) {
-    // "Cannot convert argument to a ByteString" means the OPENAI_API_KEY contains
-    // non-ASCII characters (e.g. a Cyrillic placeholder). The key is sent in the
-    // Authorization header, which must be ASCII-only.
     if (err instanceof TypeError && err.message.includes("ByteString")) {
       throw new Error(
         "OPENAI_API_KEY contains non-ASCII characters. " +
@@ -91,9 +103,7 @@ export async function analyzeContent(text: string, language = "English"): Promis
     throw new Error(`OpenAI API call failed: ${message}`);
   }
 
-  if (!raw) {
-    throw new Error("OpenAI returned an empty response");
-  }
+  if (!raw) throw new Error("OpenAI returned an empty response");
 
   return parseAndValidate(raw);
 }

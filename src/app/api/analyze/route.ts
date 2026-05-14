@@ -96,8 +96,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Prisma types sentiment as string; carry the narrowed union from the AI layer
-  const response: AnalysisResult = { ...record, sentiment: analysis.sentiment };
+  // Merge the Prisma record with AI-enriched fields not stored in the DB.
+  // sentiment is cast from string to the Sentiment union (safe — validated by parseAndValidate).
+  const response: AnalysisResult = {
+    ...record,
+    sentiment:      analysis.sentiment,
+    sentimentScore: analysis.sentimentScore,
+    category:       analysis.category,
+    designStyle:    analysis.designStyle,
+    // Pass the scraped text back so the client can use it as chat context.
+    // It is not stored in the DB — kept only in the client session.
+    scrapedText:    scraped.text,
+  };
 
   return NextResponse.json<ApiResponse<AnalysisResult>>(
     { success: true, data: response },
