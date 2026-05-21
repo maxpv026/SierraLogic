@@ -39,6 +39,7 @@ jobs:
           NEXTAUTH_URL: "http://localhost:3000"
           NEXTAUTH_SECRET: "dummy_secret_for_ci_build_only"
           NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+          OPENAI_API_KEY: "sk-dummy-key-for-build-process"
           STRIPE_SECRET_KEY: "sk_test_dummy"
           STRIPE_WEBHOOK_SECRET: "whsec_dummy"
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_test_dummy"
