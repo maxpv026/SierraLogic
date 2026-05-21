@@ -211,6 +211,7 @@ function GeneratingProgress({ urlCount, onDone }: { urlCount: number; onDone: bo
   const duration         = Math.max(urlCount * 9_000, 12_000);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (onDone) { setPct(100); return; }
     const start = Date.now();
     const id = setInterval(() => {

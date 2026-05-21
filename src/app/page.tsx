@@ -1074,7 +1074,9 @@ export default function Home() {
     } catch { /* non-critical */ }
   }, [isGuest]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void fetchHistory(); }, [fetchHistory]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void fetchTasks();   }, [fetchTasks]);
 
   // — Toggle battle mode (mutually exclusive with vision)

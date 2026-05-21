@@ -120,7 +120,7 @@ export function WebsiteChat({ websiteContext, websiteUrl }: WebsiteChatProps) {
     }
   }
 
-  function useSuggestion(text: string) {
+  function handleSuggestion(text: string) {
     sendMessage({ role: "user", parts: [{ type: "text", text }] });
   }
 
@@ -154,7 +154,7 @@ export function WebsiteChat({ websiteContext, websiteUrl }: WebsiteChatProps) {
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s}
-                  onClick={() => useSuggestion(s)}
+                  onClick={() => handleSuggestion(s)}
                   disabled={isStreaming}
                   className="rounded-full border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-violet-400 hover:bg-violet-50/50 hover:text-violet-600 disabled:opacity-40 dark:hover:bg-violet-950/30 dark:hover:text-violet-400"
                 >

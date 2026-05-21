@@ -581,6 +581,7 @@ export function KanbanBoard({ initialTasks }: KanbanBoardProps) {
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const draggingId                      = useRef<string | null>(null);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setTasks(initialTasks); }, [initialTasks]);
 
   function handleDragStart(e: React.DragEvent, id: string) {

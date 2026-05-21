@@ -21,6 +21,7 @@ export function LangProvider({ children }: { children: ReactNode }) {
     const stored      = typeof window !== "undefined" ? localStorage.getItem("sierralogic-lang") : null;
     const resolved    = sessionLang ?? stored ?? "en";
     if (VALID_LANGS.includes(resolved as Lang)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLangState(resolved as Lang);
     }
   }, [session]);

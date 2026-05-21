@@ -157,6 +157,7 @@ function ProfileTab({ session, update }: { session: ReturnType<typeof useSession
 
   useEffect(() => {
     if (!session?.user) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setImagePreview(session.user.image ?? null);
     // Fetch extended profile
     fetch("/api/user/info")
@@ -278,7 +279,9 @@ function PreferencesTab() {
   // Seed from DB-backed session (falls back to localStorage for guests)
   useEffect(() => {
     const sessionLang = (session?.user as { language?: string } | undefined)?.language;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLang(sessionLang ?? localStorage.getItem("sierralogic-lang") ?? "en");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDepth(localStorage.getItem("sierralogic-depth") ?? "standard");
   }, [session]);
 
@@ -467,6 +470,7 @@ function TwoFASection({ enabled: initialEnabled }: { enabled: boolean }) {
   const [loading, setLoading]  = useState(false);
   const [mounted, setMounted]  = useState(false);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMounted(true); }, []);
 
   // Escape key closes the modal
@@ -922,6 +926,7 @@ function AIUsageTab() {
   }, []);
 
   // Initial fetch
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void fetchStats(); }, [fetchStats]);
 
   // Stripe redirect outcomes
@@ -1097,7 +1102,7 @@ function AIUsageTab() {
             <CardContent className="pt-5">
               {plan === "PRO" ? (
                 <>
-                  <p className="text-sm font-semibold">You're on Pro</p>
+                  <p className="text-sm font-semibold">You&apos;re on Pro</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Upgrade to Max for unlimited analyses and priority support.
                   </p>

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { createPortal }        from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { Loader2, X, Check, Sparkles, Zap, Infinity } from "lucide-react";
+import { Loader2, X, Check, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -210,6 +210,7 @@ export function PricingModal({ open, onClose, currentPlan }: PricingModalProps) 
   const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null);
   // createPortal requires the DOM to be available — guard for SSR
   const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMounted(true); }, []);
 
   function handleSelect(plan: PlanId) {

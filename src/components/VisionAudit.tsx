@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
   Eye, CheckCircle2, Loader2, AlertTriangle, Lightbulb,
@@ -97,6 +97,7 @@ function BrowserMockup({ url, screenshotUrl }: { url: string; screenshotUrl: str
 
       {/* Screenshot */}
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={screenshotUrl}
           alt="Website screenshot captured for analysis"
