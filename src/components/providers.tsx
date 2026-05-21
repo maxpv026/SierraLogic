@@ -6,6 +6,7 @@ import { ThemeProvider } from "next-themes";
 import { useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { LangProvider } from "@/lib/i18n-context";
 
 // Redirects email-login users (name === null) to the settings/onboarding page.
 // Fires at most once per session via a ref guard.
@@ -36,8 +37,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-        <OnboardingGuard>{children}</OnboardingGuard>
-        <Toaster richColors position="top-right" />
+        <LangProvider>
+          <OnboardingGuard>{children}</OnboardingGuard>
+          <Toaster richColors position="top-right" />
+        </LangProvider>
       </ThemeProvider>
     </SessionProvider>
   );

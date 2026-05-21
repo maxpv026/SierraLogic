@@ -7,11 +7,16 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2, TrendingUp, TrendingDown, Minus, Globe,
-  Sun, Moon, PanelLeft, ChevronRight, Layers, Settings, LogOut, ChevronUp, BarChart2, X,
+  Sun, Moon, PanelLeft, ChevronRight, Layers, Settings, LogOut, ChevronUp, BarChart2, X, Swords,
+  Trophy, Lightbulb, Plus, Eye, Briefcase, ListChecks,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AnalyticsCharts } from "@/components/AnalyticsCharts";
 import { WebsiteChat }    from "@/components/WebsiteChat";
+import { BattleChart }       from "@/components/BattleChart";
+import { BoardOfDirectors, BoardSkeleton } from "@/components/BoardOfDirectors";
+import { KanbanBoard }     from "@/components/KanbanBoard";
+import { VisionAudit, VisionLoading } from "@/components/VisionAudit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -22,134 +27,10 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import type { AnalysisResult, ApiResponse, Sentiment } from "@/types";
+import type { AnalysisResult, ApiResponse, CompareResult, Sentiment, TaskItem, VisionResult } from "@/types";
 
-// ─── i18n labels ─────────────────────────────────────────────────────────────
-
-type Lang = "en" | "uk" | "de" | "fr" | "pl";
-
-const LABELS: Record<Lang, Record<string, string>> = {
-  en: {
-    title: "Analyze any website instantly",
-    subtitle: "Extract topics, sentiment, summary, and SEO keywords from any URL using GPT-4o mini.",
-    analyze: "Analyze",
-    analyzing: "Analyzing...",
-    urlPlaceholder: "https://example.com",
-    targetLang: "Output language",
-    platformMode: "Platform Mode",
-    recentAnalyses: "Recent Analyses",
-    noHistory: "No analyses yet — enter a URL above.",
-    overview: "Overview",
-    seoKeywords: "SEO Keywords",
-    summary: "Summary",
-    mainTopics: "Main Topics",
-    topKeywords: "Top SEO Keywords",
-    analyzed: "Analyzed",
-    errorPrefix: "Error",
-    networkError: "Network error — check your connection and try again.",
-    analysisFailed: "Analysis failed — please try again.",
-    uiLang: "Language",
-    category: "Category",
-    designStyle: "Design Style",
-    sentimentScore: "Sentiment Score",
-  },
-  uk: {
-    title: "Аналізуйте будь-який сайт миттєво",
-    subtitle: "Отримайте теми, тональність, резюме та SEO-ключові слова з будь-якого URL за допомогою GPT-4o mini.",
-    analyze: "Аналізувати",
-    analyzing: "Аналізую...",
-    urlPlaceholder: "https://example.com",
-    targetLang: "Мова результату",
-    platformMode: "Режим платформи",
-    recentAnalyses: "Останні аналізи",
-    noHistory: "Аналізів поки немає — введіть URL вище.",
-    overview: "Огляд",
-    seoKeywords: "SEO-ключі",
-    summary: "Резюме",
-    mainTopics: "Основні теми",
-    topKeywords: "Топ SEO-ключові слова",
-    analyzed: "Проаналізовано",
-    errorPrefix: "Помилка",
-    networkError: "Помилка мережі — перевірте з'єднання.",
-    analysisFailed: "Аналіз не вдався — спробуйте ще раз.",
-    uiLang: "Мова інтерфейсу",
-    category: "Категорія",
-    designStyle: "Стиль оформлення",
-    sentimentScore: "Оцінка тональності",
-  },
-  de: {
-    title: "Analysieren Sie jede Website sofort",
-    subtitle: "Extrahieren Sie Themen, Stimmung, Zusammenfassung und SEO-Keywords aus jeder URL mit GPT-4o mini.",
-    analyze: "Analysieren",
-    analyzing: "Analysiere...",
-    urlPlaceholder: "https://example.com",
-    targetLang: "Ausgabesprache",
-    platformMode: "Plattformmodus",
-    recentAnalyses: "Letzte Analysen",
-    noHistory: "Noch keine Analysen — URL oben eingeben.",
-    overview: "Übersicht",
-    seoKeywords: "SEO-Keywords",
-    summary: "Zusammenfassung",
-    mainTopics: "Hauptthemen",
-    topKeywords: "Top SEO-Keywords",
-    analyzed: "Analysiert",
-    errorPrefix: "Fehler",
-    networkError: "Netzwerkfehler — Verbindung prüfen.",
-    analysisFailed: "Analyse fehlgeschlagen — erneut versuchen.",
-    uiLang: "Sprache",
-    category: "Kategorie",
-    designStyle: "Designstil",
-    sentimentScore: "Stimmungswert",
-  },
-  fr: {
-    title: "Analysez n'importe quel site instantanément",
-    subtitle: "Extrayez sujets, sentiment, résumé et mots-clés SEO depuis n'importe quelle URL avec GPT-4o mini.",
-    analyze: "Analyser",
-    analyzing: "Analyse en cours...",
-    urlPlaceholder: "https://example.com",
-    targetLang: "Langue de sortie",
-    platformMode: "Mode plateforme",
-    recentAnalyses: "Analyses récentes",
-    noHistory: "Aucune analyse — saisissez une URL.",
-    overview: "Vue d'ensemble",
-    seoKeywords: "Mots-clés SEO",
-    summary: "Résumé",
-    mainTopics: "Thèmes principaux",
-    topKeywords: "Top mots-clés SEO",
-    analyzed: "Analysé le",
-    errorPrefix: "Erreur",
-    networkError: "Erreur réseau — vérifiez votre connexion.",
-    analysisFailed: "Analyse échouée — réessayez.",
-    uiLang: "Langue",
-    category: "Catégorie",
-    designStyle: "Style de conception",
-    sentimentScore: "Score de sentiment",
-  },
-  pl: {
-    title: "Analizuj każdą stronę natychmiastowo",
-    subtitle: "Wydobądź tematy, sentyment, podsumowanie i słowa kluczowe SEO z dowolnego URL za pomocą GPT-4o mini.",
-    analyze: "Analizuj",
-    analyzing: "Analizuję...",
-    urlPlaceholder: "https://example.com",
-    targetLang: "Język wyniku",
-    platformMode: "Tryb platformy",
-    recentAnalyses: "Ostatnie analizy",
-    noHistory: "Brak analiz — wpisz URL powyżej.",
-    overview: "Przegląd",
-    seoKeywords: "Słowa kluczowe SEO",
-    summary: "Podsumowanie",
-    mainTopics: "Główne tematy",
-    topKeywords: "Top słowa kluczowe SEO",
-    analyzed: "Przeanalizowano",
-    errorPrefix: "Błąd",
-    networkError: "Błąd sieci — sprawdź połączenie.",
-    analysisFailed: "Analiza nie powiodła się — spróbuj ponownie.",
-    uiLang: "Język",
-    category: "Kategoria",
-    designStyle: "Styl projektu",
-    sentimentScore: "Wynik sentymentu",
-  },
-};
+import { LABELS, LANG_NAMES, type Lang } from "@/lib/i18n";
+import { useLang } from "@/lib/i18n-context";
 
 // ─── Config constants ─────────────────────────────────────────────────────────
 
@@ -186,10 +67,6 @@ const PLATFORM_MODES: Array<{ value: string } & Record<Lang, string>> = [
 ];
 
 // Maps UI lang code → full language name sent to the AI
-const LANG_NAMES: Record<Lang, string> = {
-  en: "English", uk: "Ukrainian", de: "German", fr: "French", pl: "Polish",
-};
-
 // Sidebar tips (localised, non-interactive)
 const TIPS: Array<{ icon: string } & Record<Lang, string>> = [
   {
@@ -326,8 +203,9 @@ function avatarBg(name: string | null | undefined): string {
   return AVATAR_COLORS[code];
 }
 
-function SidebarProfile({ collapsed }: { collapsed: boolean }) {
+function SidebarProfile({ collapsed, lang }: { collapsed: boolean; lang: Lang }) {
   const { data: session } = useSession();
+  const t = LABELS[lang];
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -346,7 +224,7 @@ function SidebarProfile({ collapsed }: { collapsed: boolean }) {
   const initials = getInitials(user?.name);
 
   return (
-    <div ref={ref} className="relative shrink-0 border-t border-border p-2">
+    <div ref={ref} className="relative shrink-0 border-t border-border/50 p-2">
       {/* Popover menu — opens above the button */}
       <AnimatePresence>
         {open && (
@@ -363,7 +241,7 @@ function SidebarProfile({ collapsed }: { collapsed: boolean }) {
               className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-accent"
             >
               <Settings className="h-4 w-4 text-muted-foreground" />
-              Settings
+              {t.settings}
             </Link>
             <div className="border-t border-border" />
             <button
@@ -371,7 +249,7 @@ function SidebarProfile({ collapsed }: { collapsed: boolean }) {
               className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-destructive transition-colors hover:bg-destructive/10"
             >
               <LogOut className="h-4 w-4" />
-              Sign out
+              {t.signOut}
             </button>
           </motion.div>
         )}
@@ -426,6 +304,7 @@ interface SidebarContentProps {
   history: AnalysisResult[];
   historyLoading: boolean;
   onHistorySelect: (item: AnalysisResult) => void;
+  onNewAnalysis: () => void;
   showCollapseToggle?: boolean;
   onCollapse?: () => void;
 }
@@ -439,6 +318,7 @@ function SidebarContent({
   history,
   historyLoading,
   onHistorySelect,
+  onNewAnalysis,
   showCollapseToggle,
   onCollapse,
 }: SidebarContentProps) {
@@ -448,33 +328,60 @@ function SidebarContent({
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
       <div className={cn(
-        "flex h-14 shrink-0 items-center border-b border-border px-3 gap-2",
+        "flex h-14 shrink-0 items-center border-b border-border/60 px-3 gap-2",
         collapsed ? "justify-center" : "justify-between",
       )}>
         {!collapsed && (
           <div className="flex items-center gap-2 min-w-0">
             <span className="font-bold tracking-tight text-foreground truncate">SierraLogic</span>
-            <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">AI</span>
+            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">AI</span>
           </div>
         )}
         {showCollapseToggle && (
-          <Button variant="ghost" size="icon" onClick={onCollapse} className="shrink-0">
+          <Button variant="ghost" size="icon" onClick={onCollapse} className="shrink-0 text-muted-foreground hover:text-foreground">
             <PanelLeft className="h-4 w-4" />
           </Button>
         )}
       </div>
 
+      {/* New Analysis button */}
+      <div className={cn("shrink-0 px-3 py-3", collapsed && "flex justify-center px-2")}>
+        {collapsed ? (
+          <button
+            onClick={onNewAnalysis}
+            title="New Analysis"
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-[0.97]"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        ) : (
+          <button
+            onClick={onNewAnalysis}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-[0.98]"
+          >
+            <Plus className="h-4 w-4" />
+            {t.newAnalysis}
+          </button>
+        )}
+      </div>
+
       {/* Scrollable middle section */}
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
+      <div className={cn(
+        "flex flex-1 flex-col gap-3 overflow-y-auto p-3",
+        // Slim modern scrollbar
+        "[&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent",
+        "[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
+        "hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/30",
+      )}>
         {/* Platform Mode */}
         {!collapsed && (
           <div className="space-y-1.5">
-            <p className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="px-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
               {t.platformMode}
             </p>
             <Select value={platformMode} onValueChange={onPlatformModeChange}>
-              <SelectTrigger className="w-full text-sm">
-                <Layers className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+              <SelectTrigger className="w-full text-xs h-9 bg-background/50 border-border/60">
+                <Layers className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -489,17 +396,64 @@ function SidebarContent({
         )}
         {collapsed && (
           <div className="flex justify-center">
-            <Layers className="h-4 w-4 text-muted-foreground" />
+            <Layers className="h-4 w-4 text-muted-foreground/60" />
           </div>
         )}
 
-        {/* Divider */}
-        <div className="flex items-center gap-2">
-          <div className="flex-1 border-t border-border" />
-          {!collapsed && (
-            <span className="text-xs text-muted-foreground whitespace-nowrap">{t.recentAnalyses}</span>
+        {/* Battle Mode shortcut */}
+        <Link
+          href="/compare"
+          className={cn(
+            "flex items-center gap-2 rounded-xl border border-border/40 bg-muted/20 px-3 py-2",
+            "text-xs font-medium text-muted-foreground",
+            "transition-all duration-150 hover:border-violet-400/40 hover:bg-violet-500/8 hover:text-violet-400",
+            collapsed && "justify-center px-2",
           )}
-          <div className="flex-1 border-t border-border" />
+          title="Battle Mode — compare two sites"
+        >
+          <Swords className="h-3.5 w-3.5 shrink-0" />
+          {!collapsed && <span>Battle Mode</span>}
+        </Link>
+
+        {/* Agency Lead Machine shortcut */}
+        <Link
+          href="/agency"
+          className={cn(
+            "flex items-center gap-2 rounded-xl border border-border/40 bg-muted/20 px-3 py-2",
+            "text-xs font-medium text-muted-foreground",
+            "transition-all duration-150 hover:border-violet-400/40 hover:bg-violet-500/8 hover:text-violet-400",
+            collapsed && "justify-center px-2",
+          )}
+          title="Agency Lead Machine"
+        >
+          <Briefcase className="h-3.5 w-3.5 shrink-0" />
+          {!collapsed && <span>Agency</span>}
+        </Link>
+
+        {/* Tasks inspiration page shortcut */}
+        <Link
+          href="/tasks"
+          className={cn(
+            "flex items-center gap-2 rounded-xl border border-border/40 bg-muted/20 px-3 py-2",
+            "text-xs font-medium text-muted-foreground",
+            "transition-all duration-150 hover:border-indigo-400/40 hover:bg-indigo-500/8 hover:text-indigo-400",
+            collapsed && "justify-center px-2",
+          )}
+          title="AI Action Plan"
+        >
+          <ListChecks className="h-3.5 w-3.5 shrink-0" />
+          {!collapsed && <span>{t.actionPlan}</span>}
+        </Link>
+
+        {/* Recent analyses divider */}
+        <div className="flex items-center gap-2 pt-1">
+          <div className="flex-1 border-t border-border/50" />
+          {!collapsed && (
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 whitespace-nowrap">
+              {t.recentAnalyses}
+            </span>
+          )}
+          <div className="flex-1 border-t border-border/50" />
         </div>
 
         {/* Content: Tips for guests, History for logged-in users */}
@@ -509,7 +463,7 @@ function SidebarContent({
               {TIPS.map((tip, i) => (
                 <div
                   key={i}
-                  className="rounded-lg bg-muted/50 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground"
+                  className="rounded-lg border border-border/40 bg-muted/30 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground"
                 >
                   <span className="mr-1.5">{tip.icon}</span>
                   {tip[lang]}
@@ -521,40 +475,40 @@ function SidebarContent({
           <div className="flex flex-col gap-0.5">
             {historyLoading ? (
               Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-2 rounded-md px-2 py-2">
-                  <Skeleton className="h-3 w-3 shrink-0 rounded-full" />
-                  {!collapsed && <Skeleton className="h-3 flex-1" />}
+                <div key={i} className="flex items-center gap-2 rounded-lg px-2.5 py-2.5">
+                  <Skeleton className="h-2.5 w-2.5 shrink-0 rounded-full" />
+                  {!collapsed && <Skeleton className="h-3 flex-1 rounded" />}
                 </div>
               ))
             ) : history.length === 0 ? (
               !collapsed && (
-                <p className="px-2 py-4 text-center text-xs text-muted-foreground">{t.noHistory}</p>
+                <p className="px-2 py-4 text-center text-xs text-muted-foreground/60">{t.noHistory}</p>
               )
             ) : (
               history.map((item) => (
-                <motion.button
+                <button
                   key={item.id}
                   onClick={() => onHistorySelect(item)}
                   title={item.url}
-                  whileHover={{ x: 4 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 35 }}
-                  className="group flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent"
+                  className={cn(
+                    "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left",
+                    "transition-all duration-150",
+                    "hover:bg-accent/60 hover:shadow-sm",
+                  )}
                 >
-                  <span
-                    className={cn(
-                      "h-2 w-2 shrink-0 rounded-full",
-                      SENTIMENT_CONFIG[item.sentiment].dot,
-                    )}
-                  />
+                  <span className={cn(
+                    "h-2 w-2 shrink-0 rounded-full transition-transform group-hover:scale-110",
+                    SENTIMENT_CONFIG[item.sentiment].dot,
+                  )} />
                   {!collapsed && (
                     <>
-                      <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground group-hover:text-foreground">
+                      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground group-hover:text-foreground">
                         {item.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
                       </span>
-                      <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />
+                      <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/30 opacity-0 transition-opacity group-hover:opacity-100" />
                     </>
                   )}
-                </motion.button>
+                </button>
               ))
             )}
           </div>
@@ -576,21 +530,19 @@ function SidebarContent({
               transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
               className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-muted/40 p-3"
             >
-              <p className="mb-1 text-xs font-semibold text-foreground">Sign in to save history</p>
-              <p className="mb-3 text-xs text-muted-foreground">
-                Analyses are not saved in guest mode.
-              </p>
+              <p className="mb-1 text-xs font-semibold text-foreground">{t.signInToSave}</p>
+              <p className="mb-3 text-xs text-muted-foreground">{t.guestModeNote}</p>
               <Link
                 href="/login"
                 className="flex h-8 w-full items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
               >
-                Sign in
+                {t.signIn}
               </Link>
             </motion.div>
           </div>
         )
       ) : (
-        <SidebarProfile collapsed={collapsed} />
+        <SidebarProfile collapsed={collapsed} lang={lang} />
       )}
     </div>
   );
@@ -600,39 +552,61 @@ function SidebarContent({
 
 function AppHeader({
   onMenuClick,
-  uiLang,
-  onUiLangChange,
+  activeContext,
 }: {
-  onMenuClick: () => void;
-  uiLang: Lang;
-  onUiLangChange: (v: Lang) => void;
+  onMenuClick:    () => void;
+  activeContext?: string;
 }) {
   const { status } = useSession();
+  const { lang }   = useLang();
+  const t          = LABELS[lang];
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-4">
-      <Button variant="ghost" size="icon" onClick={onMenuClick} aria-label="Toggle sidebar">
+    <header className={cn(
+      "flex h-14 shrink-0 items-center gap-3 px-4",
+      "border-b border-white/20 dark:border-white/10",
+      "bg-white/30 dark:bg-black/20 backdrop-blur-2xl",
+      "shadow-[0_1px_0_rgba(255,255,255,0.08)]",
+    )}>
+      {/* Mobile-only sidebar toggle */}
+      <Button
+        variant="ghost" size="icon"
+        onClick={onMenuClick}
+        aria-label="Toggle sidebar"
+        className="shrink-0 text-muted-foreground hover:text-foreground md:hidden"
+      >
         <PanelLeft className="h-4 w-4" />
       </Button>
 
-      {/* Brand — shown on mobile where sidebar is hidden */}
+      {/* Brand — mobile only */}
       <span className="font-bold tracking-tight text-foreground md:hidden">SierraLogic</span>
 
-      <div className="ml-auto flex items-center gap-2">
-        {/* UI Language */}
-        <Select value={uiLang} onValueChange={(v) => v && onUiLangChange(v as Lang)}>
-          <SelectTrigger className="h-8 w-auto gap-1 text-xs border-none shadow-none bg-transparent focus:ring-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent align="end">
-            <SelectItem value="en">🇬🇧 EN</SelectItem>
-            <SelectItem value="uk">🇺🇦 UA</SelectItem>
-            <SelectItem value="de">🇩🇪 DE</SelectItem>
-            <SelectItem value="fr">🇫🇷 FR</SelectItem>
-            <SelectItem value="pl">🇵🇱 PL</SelectItem>
-          </SelectContent>
-        </Select>
+      {/* Dynamic context badge — center */}
+      <div className="hidden flex-1 items-center justify-center sm:flex">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeContext ?? "__idle__"}
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 5 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="flex max-w-[320px] items-center gap-2"
+          >
+            {activeContext ? (
+              <>
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]" />
+                <span className="truncate text-sm font-medium text-foreground/70">
+                  {activeContext}
+                </span>
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground/35">{t.newAnalysis}</span>
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
 
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         <ThemeToggle />
 
         {/* Auth action */}
@@ -643,14 +617,14 @@ function AppHeader({
             className="text-xs text-muted-foreground"
             onClick={() => signOut({ callbackUrl: "/login" })}
           >
-            Sign out
+            {t.signOut}
           </Button>
         ) : (
           <Link
             href="/login"
             className="inline-flex h-8 items-center rounded-md border border-border bg-transparent px-3 text-xs font-medium transition-colors hover:bg-accent"
           >
-            Sign in
+            {t.signIn}
           </Link>
         )}
       </div>
@@ -748,10 +722,12 @@ function AnalysisPanel({
   result,
   lang,
   scrapedText,
+  tasks,
 }: {
   result:       AnalysisResult;
   lang:         Lang;
   scrapedText?: string;
+  tasks:        TaskItem[] | null; // null = guest (tab hidden)
 }) {
   const t = LABELS[lang];
   const [showAnalytics, setShowAnalytics] = useState(false);
@@ -761,7 +737,8 @@ function AnalysisPanel({
 
   return (
     <>
-      <div className="mt-8 space-y-5">
+      {/* pb-36: keeps the floating search bar from hiding the bottom of any tab */}
+      <div className="mt-8 space-y-5 pb-36">
 
         {/* URL + sentiment pill */}
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -792,54 +769,114 @@ function AnalysisPanel({
           <TabsList className="w-full">
             <TabsTrigger value="overview" className="flex-1">{t.overview}</TabsTrigger>
             <TabsTrigger value="seo" className="flex-1">{t.seoKeywords}</TabsTrigger>
+            {result.boardOfDirectors && (
+              <TabsTrigger value="board" className="flex-1">{t.aiBoard}</TabsTrigger>
+            )}
+            {tasks !== null && (
+              <TabsTrigger value="action-plan" className="flex-1">📋 {t.actionPlan}</TabsTrigger>
+            )}
           </TabsList>
 
-          <TabsContent value="overview" className="mt-4 space-y-4">
-            {/* Summary */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <TabsContent value="overview" className="mt-4">
+            {/* Centred, max-width container keeps both panels readable at any screen width */}
+            <div className="w-full max-w-4xl mx-auto flex flex-col gap-4">
+
+              {/* Summary glass panel */}
+              <div className={cn(
+                "rounded-2xl border p-5 space-y-3",
+                "bg-white/10 dark:bg-zinc-900/20 backdrop-blur-2xl",
+                "border-white/30 dark:border-white/10",
+                "shadow-[0_8px_32px_-8px_rgba(0,0,0,0.10)]",
+                "transition-shadow duration-300 hover:shadow-[0_12px_40px_-8px_rgba(0,0,0,0.16)]",
+              )}>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
                   {t.summary}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
+                </p>
                 <p className="text-sm leading-relaxed text-foreground/80">{result.summary}</p>
-                {/* Sentiment score gauge — only for fresh analyses (not history rows) */}
                 {result.sentimentScore !== undefined && (
                   <SentimentGauge score={result.sentimentScore} label={t.sentimentScore} />
                 )}
-              </CardContent>
-            </Card>
-
-            {/* Main topics */}
-            <div>
-              <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t.mainTopics}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {result.topics.map((topic) => (
-                  <Badge key={topic} variant="secondary">{topic}</Badge>
-                ))}
               </div>
+
+              {/* Topics glass panel */}
+              <div className={cn(
+                "rounded-2xl border p-5",
+                "bg-white/10 dark:bg-zinc-900/20 backdrop-blur-2xl",
+                "border-white/30 dark:border-white/10",
+                "shadow-[0_8px_32px_-8px_rgba(0,0,0,0.10)]",
+                "transition-shadow duration-300 hover:shadow-[0_12px_40px_-8px_rgba(0,0,0,0.16)]",
+              )}>
+                <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+                  {t.mainTopics}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {result.topics.map((topic) => (
+                    <span
+                      key={topic}
+                      className={cn(
+                        "rounded-full px-3 py-1 text-xs font-medium",
+                        "bg-white/20 dark:bg-white/8 border border-white/30 dark:border-white/10",
+                        "text-foreground/80 transition-colors duration-200",
+                        "hover:bg-white/35 dark:hover:bg-white/15",
+                      )}
+                    >
+                      {topic}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
             </div>
           </TabsContent>
 
           <TabsContent value="seo" className="mt-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="w-full max-w-3xl mx-auto">
+              <div className={cn(
+                "rounded-2xl border p-5",
+                "bg-white/10 dark:bg-zinc-900/20 backdrop-blur-2xl",
+                "border-white/30 dark:border-white/10",
+                "shadow-[0_8px_32px_-8px_rgba(0,0,0,0.10)]",
+                "transition-shadow duration-300 hover:shadow-[0_12px_40px_-8px_rgba(0,0,0,0.16)]",
+              )}>
+                <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
                   {t.topKeywords}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {result.keywords.map((kw) => (
-                    <Badge key={kw} variant="outline">{kw}</Badge>
+                    <span
+                      key={kw}
+                      className={cn(
+                        "rounded-full px-3 py-1 text-sm font-medium",
+                        "bg-white/20 dark:bg-white/8 border border-white/30 dark:border-white/10",
+                        "text-foreground/80 transition-colors duration-200",
+                        "hover:bg-white/35 dark:hover:bg-white/15",
+                      )}
+                    >
+                      {kw}
+                    </span>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </TabsContent>
+
+          {result.boardOfDirectors && (
+            <TabsContent value="board" className="mt-4">
+              <BoardOfDirectors data={result.boardOfDirectors} lang={lang} />
+            </TabsContent>
+          )}
+
+          {tasks !== null && (
+            <TabsContent value="action-plan" className="mt-4">
+              {tasks.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  {t.noTasksYet}
+                </p>
+              ) : (
+                <KanbanBoard initialTasks={tasks} lang={lang} />
+              )}
+            </TabsContent>
+          )}
         </Tabs>
 
         <div className="flex items-center justify-between">
@@ -854,7 +891,7 @@ function AnalysisPanel({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-1.5 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-400 dark:hover:bg-indigo-950/50"
               >
                 <BarChart2 className="h-3.5 w-3.5" />
-                Detailed Analytics
+                {t.detailedAnalytics}
               </button>
             )}
             {canChat && (
@@ -867,7 +904,7 @@ function AnalysisPanel({
                     : "border-violet-200 bg-violet-50/60 text-violet-600 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-400 dark:hover:bg-violet-950/50",
                 )}
               >
-                💬 {showChat ? "Close Chat" : "Chat with Website"}
+                💬 {showChat ? t.closeChat : t.chatWithWebsite}
               </button>
             )}
           </div>
@@ -899,31 +936,122 @@ function AnalysisPanel({
   );
 }
 
+// ─── Battle result panel ──────────────────────────────────────────────────────
+
+function hn(url: string) {
+  try { return new URL(url).hostname; } catch { return url; }
+}
+
+function BattleResultPanel({ result, lang }: { result: CompareResult; lang: Lang }) {
+  const t = LABELS[lang];
+  const s1 = hn(result.site1Url);
+  const s2 = hn(result.site2Url);
+  return (
+    <div className="mt-8 space-y-4">
+      {/* Chart */}
+      <div className="rounded-2xl border border-border bg-card p-5">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {t.competitiveRadar}
+        </p>
+        <BattleChart data={result.radarData} site1Label={s1} site2Label={s2} />
+      </div>
+
+      {/* Verdict */}
+      <div className="rounded-2xl border border-violet-500/30 bg-violet-950/15 p-5">
+        <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-violet-300">
+          <Trophy className="h-4 w-4" /> {t.verdict}
+        </p>
+        <p className="text-sm leading-relaxed text-foreground">{result.verdict}</p>
+      </div>
+
+      {/* Strengths + Advice */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        {/* Site 1 */}
+        <div className="rounded-2xl border border-indigo-500/25 bg-card p-4">
+          <p className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-indigo-400">
+            <span className="inline-block h-2 w-2 rounded-full bg-indigo-500" />
+            {s1}
+          </p>
+          <ul className="space-y-1.5">
+            {result.site1Strengths.map((item, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Site 2 */}
+        <div className="rounded-2xl border border-emerald-500/25 bg-card p-4">
+          <p className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+            {s2}
+          </p>
+          <ul className="space-y-1.5">
+            {result.site2Strengths.map((item, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Advice */}
+        <div className="rounded-2xl border border-amber-500/25 bg-card p-4">
+          <p className="mb-2.5 flex items-center gap-2 text-xs font-semibold text-amber-400">
+            <Lightbulb className="h-3.5 w-3.5" /> {t.advice}
+          </p>
+          <ul className="space-y-1.5">
+            {result.actionableAdvice.map((item, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <p className="text-center text-xs text-muted-foreground/50">
+        {t.analyzed} {new Date().toLocaleString()}
+      </p>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
   // — Analyzer state
-  const [url, setUrl]             = useState("");
-  const [loading, setLoading]     = useState(false);
-  const [result, setResult]       = useState<AnalysisResult | null>(null);
+  const [url1, setUrl1]               = useState("");
+  const [url2, setUrl2]               = useState("");
+  const [isBattleMode, setIsBattleMode]   = useState(false);
+  const [isVisionMode, setIsVisionMode]   = useState(false);
+  const [visionResult, setVisionResult]   = useState<VisionResult | null>(null);
+  const [loading, setLoading]         = useState(false);
+  const [result, setResult]           = useState<AnalysisResult | null>(null);
+  const [compareResult, setCompareResult] = useState<CompareResult | null>(null);
   const [scrapedText, setScrapedText] = useState<string>("");
-  const [error, setError]         = useState<string | null>(null);
+  const [error, setError]             = useState<string | null>(null);
 
   // — History state
   const [history, setHistory] = useState<AnalysisResult[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
-  // — Auth state
+  // — Tasks state
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+
+  // — Auth + language
   const { status } = useSession();
-  const isGuest = status === "unauthenticated";
+  const isGuest    = status === "unauthenticated";
+  const { lang: uiLang } = useLang();
+  const t = LABELS[uiLang];
 
   // — Layout / preference state
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [platformMode, setPlatformMode] = useState<string>("standard");
-  const [uiLang, setUiLang] = useState<Lang>("en");
-
-  const t = LABELS[uiLang];
 
   // — History fetch
   const fetchHistory = useCallback(async () => {
@@ -936,47 +1064,161 @@ export default function Home() {
     finally { setHistoryLoading(false); }
   }, []);
 
-  useEffect(() => { void fetchHistory(); }, [fetchHistory]);
+  // — Tasks fetch (auth only)
+  const fetchTasks = useCallback(async () => {
+    if (isGuest) return;
+    try {
+      const res  = await fetch("/api/tasks");
+      const data: ApiResponse<TaskItem[]> = await res.json();
+      if (data.success && data.data) setTasks(data.data);
+    } catch { /* non-critical */ }
+  }, [isGuest]);
 
-  // — Analyze
+  useEffect(() => { void fetchHistory(); }, [fetchHistory]);
+  useEffect(() => { void fetchTasks();   }, [fetchTasks]);
+
+  // — Toggle battle mode (mutually exclusive with vision)
+  function toggleBattleMode() {
+    setIsBattleMode((v) => {
+      const next = !v;
+      setError(null);
+      if (next) {
+        setResult(null);
+        setScrapedText("");
+        setVisionResult(null);
+        setIsVisionMode(false);
+      } else {
+        setUrl2("");
+        setCompareResult(null);
+      }
+      return next;
+    });
+  }
+
+  // — Toggle vision mode (mutually exclusive with battle)
+  function toggleVisionMode() {
+    setIsVisionMode((v) => {
+      const next = !v;
+      setError(null);
+      if (next) {
+        setResult(null);
+        setScrapedText("");
+        setCompareResult(null);
+        setIsBattleMode(false);
+        setUrl2("");
+      } else {
+        setVisionResult(null);
+      }
+      return next;
+    });
+  }
+
+  // — Analyze (standard / battle / vision)
   async function handleAnalyze(e: React.FormEvent) {
     e.preventDefault();
-    if (!url.trim()) return;
+    if (loading) return;
 
     setLoading(true);
-    setResult(null);
     setError(null);
 
-    try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim(), language: LANG_NAMES[uiLang] }),
-      });
-      const data: ApiResponse<AnalysisResult> = await res.json();
-
-      if (data.success && data.data) {
-        setResult(data.data);
-        setScrapedText(data.data.scrapedText ?? "");
-        void fetchHistory();
-      } else {
-        setError(data.error ?? t.analysisFailed);
+    if (isVisionMode) {
+      if (!url1.trim()) { setLoading(false); return; }
+      setVisionResult(null);
+      try {
+        const res  = await fetch("/api/analyze/vision", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ url: url1.trim(), language: LANG_NAMES[uiLang] }),
+        });
+        const data: ApiResponse<VisionResult> = await res.json();
+        if (data.success && data.data) {
+          setVisionResult(data.data);
+        } else {
+          setError(data.error ?? t.analysisFailed);
+        }
+      } catch {
+        setError(t.networkError);
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      setError(t.networkError);
-    } finally {
-      setLoading(false);
+      return;
     }
+
+    if (isBattleMode) {
+      if (!url1.trim() || !url2.trim()) { setLoading(false); return; }
+      setCompareResult(null);
+      try {
+        const res = await fetch("/api/analyze/compare", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ url1: url1.trim(), url2: url2.trim() }),
+        });
+        const data: ApiResponse<CompareResult> = await res.json();
+        if (data.success && data.data) {
+          setCompareResult(data.data);
+        } else {
+          setError(data.error ?? t.analysisFailed);
+        }
+      } catch {
+        setError(t.networkError);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      if (!url1.trim()) { setLoading(false); return; }
+      setResult(null);
+      try {
+        const res = await fetch("/api/analyze", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ url: url1.trim(), language: LANG_NAMES[uiLang] }),
+        });
+        const data: ApiResponse<AnalysisResult> = await res.json();
+        if (data.success && data.data) {
+          setResult(data.data);
+          setScrapedText(data.data.scrapedText ?? "");
+          void fetchHistory();
+          void fetchTasks();
+        } else {
+          setError(data.error ?? t.analysisFailed);
+        }
+      } catch {
+        setError(t.networkError);
+      } finally {
+        setLoading(false);
+      }
+    }
+  }
+
+  function handleNewAnalysis() {
+    setResult(null);
+    setCompareResult(null);
+    setVisionResult(null);
+    setUrl1("");
+    setUrl2("");
+    setError(null);
+    setScrapedText("");
+    setIsBattleMode(false);
+    setIsVisionMode(false);
+    setMobileSheetOpen(false);
   }
 
   function handleHistorySelect(item: AnalysisResult) {
     setResult(item);
-    setUrl(item.url);
+    setCompareResult(null);
+    setUrl1(item.url);
     setError(null);
     setScrapedText(""); // history items don't carry scraped text
+    setIsBattleMode(false);
     setMobileSheetOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  // The active URL stripped of protocol — shown in header center and used for context
+  const rawCtx  = compareResult
+    ? `${compareResult.site1Url.replace(/^https?:\/\//, "").split("/")[0]} vs ${compareResult.site2Url.replace(/^https?:\/\//, "").split("/")[0]}`
+    : (result?.url ?? url1.trim());
+  const activeContext = rawCtx ? rawCtx.replace(/^https?:\/\//, "").replace(/\/$/, "") : undefined;
 
   const sidebarProps: SidebarContentProps = {
     collapsed: !sidebarOpen,
@@ -987,6 +1229,7 @@ export default function Home() {
     history,
     historyLoading,
     onHistorySelect: handleHistorySelect,
+    onNewAnalysis: handleNewAnalysis,
   };
 
   return (
@@ -996,7 +1239,12 @@ export default function Home() {
       <motion.aside
         animate={{ width: sidebarOpen ? 256 : 56 }}
         transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-        className="hidden md:flex flex-col border-r border-border bg-card overflow-hidden shrink-0"
+        className={cn(
+          "hidden md:flex flex-col overflow-hidden shrink-0",
+          "border-r border-white/25 dark:border-white/10",
+          "bg-white/40 dark:bg-black/30 backdrop-blur-2xl",
+          "shadow-[1px_0_0_rgba(255,255,255,0.06)]",
+        )}
       >
         <SidebarContent
           {...sidebarProps}
@@ -1019,15 +1267,8 @@ export default function Home() {
       {/* Right panel */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <AppHeader
-          onMenuClick={() => {
-            if (window.innerWidth >= 768) {
-              setSidebarOpen((v) => !v);
-            } else {
-              setMobileSheetOpen((v) => !v);
-            }
-          }}
-          uiLang={uiLang}
-          onUiLangChange={setUiLang}
+          onMenuClick={() => setMobileSheetOpen((v) => !v)}
+          activeContext={activeContext}
         />
 
         {/* Main content — dynamic center-to-bottom layout */}
@@ -1037,22 +1278,63 @@ export default function Home() {
           <div
             className={cn(
               "h-full flex flex-col",
-              loading || result ? "justify-end" : "justify-center",
+              loading || result || compareResult || visionResult ? "justify-end" : "justify-center",
             )}
           >
+            {/* Loading state — board skeleton or vision loading */}
+            <AnimatePresence>
+              {loading && !isBattleMode && (
+                <motion.div
+                  key={isVisionMode ? "vision-loading" : "board-loading"}
+                  className="flex-1 overflow-y-auto"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="mx-auto max-w-3xl px-6 py-6">
+                    {isVisionMode ? <VisionLoading /> : <BoardSkeleton lang={uiLang} />}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Result panel — scrollable area above the pinned form */}
             <AnimatePresence>
-              {!loading && result && (
+              {!loading && (result || compareResult || visionResult) && (
                 <motion.div
-                  key={result.id}
+                  key={
+                    visionResult    ? `vision-${visionResult.analyzedUrl}`
+                    : compareResult ? `battle-${compareResult.site1Url}`
+                    : result!.id
+                  }
                   className="flex-1 overflow-y-auto"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.4, ease: "easeOut" }}
                 >
-                  <div className="mx-auto max-w-2xl px-6 py-6">
-                    <AnalysisPanel result={result} lang={uiLang} scrapedText={scrapedText || undefined} />
+                  <div className={cn(
+                    "py-6",
+                    visionResult
+                      ? "mx-auto max-w-5xl px-6"
+                      : compareResult
+                        ? "mx-auto max-w-4xl px-6"
+                        : "w-full px-4 md:px-8",  // no max-w cap — AnalysisPanel controls its own widths
+                  )}>
+                    {visionResult
+                      ? <VisionAudit result={visionResult} />
+                      : compareResult
+                        ? <BattleResultPanel result={compareResult} lang={uiLang} />
+                        : result
+                          ? <AnalysisPanel
+                              result={result}
+                              lang={uiLang}
+                              scrapedText={scrapedText || undefined}
+                              tasks={isGuest ? null : tasks}
+                            />
+                          : null
+                    }
                   </div>
                 </motion.div>
               )}
@@ -1066,7 +1348,7 @@ export default function Home() {
             >
               {/* Greeting + subtitle — exits when analysis starts */}
               <AnimatePresence>
-                {!loading && !result && (
+                {!loading && !result && !compareResult && !visionResult && (
                   <motion.div
                     className="mb-8 text-center"
                     initial={{ opacity: 0, y: -8 }}
@@ -1080,37 +1362,153 @@ export default function Home() {
                 )}
               </AnimatePresence>
 
-              {/* Form — input has glow when loading */}
-              <form onSubmit={handleAnalyze} className="flex flex-col gap-2 sm:flex-row">
+              {/* Command Center — flex-col squircle with toolbar */}
+              <form onSubmit={handleAnalyze}>
                 <motion.div
-                  className="flex-1 rounded-md"
+                  className={cn(
+                    "flex flex-col overflow-hidden rounded-[2rem]",
+                    "border border-white/35 dark:border-white/12",
+                    "bg-white/50 dark:bg-black/30 backdrop-blur-2xl",
+                    "shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.35)]",
+                    "transition-[box-shadow,border-color] duration-300",
+                  )}
                   animate={loading ? {
                     boxShadow: [
-                      "0 0 0 2px rgba(99,102,241,0.3)",
-                      "0 0 20px 5px rgba(99,102,241,0.5)",
-                      "0 0 0 2px rgba(99,102,241,0.3)",
+                      "0 0 0 2px rgba(99,102,241,0.25), 0 25px 50px -12px rgba(0,0,0,0.2)",
+                      "0 0 28px 8px rgba(99,102,241,0.45), 0 25px 50px -12px rgba(0,0,0,0.2)",
+                      "0 0 0 2px rgba(99,102,241,0.25), 0 25px 50px -12px rgba(0,0,0,0.2)",
                     ],
                   } : {
-                    boxShadow: "0 0 0 0px rgba(99,102,241,0)",
+                    boxShadow: "0 20px 60px -15px rgba(0,0,0,0.18)",
                   }}
                   transition={loading
                     ? { duration: 1.8, repeat: Infinity, ease: "easeInOut" }
                     : { duration: 0.4 }
                   }
                 >
-                  <Input
+                  {/* Primary URL input */}
+                  <input
                     type="url"
-                    placeholder={t.urlPlaceholder}
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder={isBattleMode ? t.battleUrl1 : t.urlPlaceholder}
+                    value={url1}
+                    onChange={(e) => setUrl1(e.target.value)}
                     disabled={loading}
-                    className="w-full"
-                    required
+                    className={cn(
+                      "min-w-0 w-full bg-transparent",
+                      "py-5 pl-7 pr-6",
+                      "text-lg text-foreground",
+                      "placeholder:text-muted-foreground/45 placeholder:font-light",
+                      "outline-none border-none focus:outline-none",
+                      "disabled:opacity-50 disabled:cursor-not-allowed",
+                    )}
                   />
+
+                  {/* Battle Mode: second URL input */}
+                  <AnimatePresence>
+                    {isBattleMode && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mx-5 border-t border-border/40" />
+                        <input
+                          type="url"
+                          placeholder={t.battleUrl2}
+                          value={url2}
+                          onChange={(e) => setUrl2(e.target.value)}
+                          disabled={loading}
+                          className={cn(
+                            "min-w-0 w-full bg-transparent",
+                            "py-5 pl-7 pr-6",
+                            "text-lg text-foreground",
+                            "placeholder:text-muted-foreground/45 placeholder:font-light",
+                            "outline-none border-none focus:outline-none",
+                            "disabled:opacity-50 disabled:cursor-not-allowed",
+                          )}
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Toolbar */}
+                  <div className="flex items-center justify-between gap-2 border-t border-border/25 px-3 py-2">
+                    {/* Left: mode toggles */}
+                    <div className="flex items-center gap-1.5">
+                      {/* Battle Mode */}
+                      <button
+                        type="button"
+                        onClick={toggleBattleMode}
+                        disabled={loading}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5",
+                          "text-xs font-medium transition-all duration-200",
+                          isBattleMode
+                            ? "bg-violet-600 text-white shadow-sm shadow-violet-500/30"
+                            : "border border-border/60 text-muted-foreground hover:border-violet-400/60 hover:text-violet-400",
+                          "disabled:opacity-40 disabled:cursor-not-allowed",
+                        )}
+                      >
+                        <Swords className="h-3 w-3" />
+                        {t.battleMode}
+                      </button>
+
+                      {/* Vision Mode */}
+                      <button
+                        type="button"
+                        onClick={toggleVisionMode}
+                        disabled={loading}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5",
+                          "text-xs font-medium transition-all duration-200",
+                          isVisionMode
+                            ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/30"
+                            : "border border-border/60 text-muted-foreground hover:border-indigo-400/60 hover:text-indigo-400",
+                          "disabled:opacity-40 disabled:cursor-not-allowed",
+                        )}
+                      >
+                        <Eye className="h-3 w-3" />
+                        {t.visionMode ?? "AI Vision"}
+                      </button>
+                    </div>
+
+                    {/* Submit button */}
+                    <button
+                      type="submit"
+                      disabled={
+                        loading ||
+                        (isBattleMode ? (!url1.trim() || !url2.trim()) : !url1.trim())
+                      }
+                      className={cn(
+                        "rounded-[1.4rem] px-5 py-2.5",
+                        isVisionMode
+                          ? "bg-indigo-600 hover:bg-indigo-700 shadow-sm shadow-indigo-500/20"
+                          : isBattleMode
+                            ? "bg-violet-600 hover:bg-violet-700 shadow-sm shadow-violet-500/20"
+                            : "bg-primary hover:opacity-90",
+                        "text-primary-foreground text-sm font-semibold tracking-wide",
+                        "transition-all duration-200",
+                        "active:scale-[0.97]",
+                        "disabled:opacity-35 disabled:cursor-not-allowed",
+                        "inline-flex items-center gap-2",
+                      )}
+                    >
+                      {loading ? (
+                        <><Loader2 className="h-4 w-4 animate-spin" />
+                          {isVisionMode ? (t.visionAnalyzing ?? "Analyzing…") : isBattleMode ? t.battling : t.analyzing}
+                        </>
+                      ) : isVisionMode ? (
+                        <><Eye className="h-3.5 w-3.5" />{t.visionMode ?? "AI Vision"}</>
+                      ) : isBattleMode ? (
+                        <><Swords className="h-3.5 w-3.5" />{t.startBattle}</>
+                      ) : (
+                        t.analyze
+                      )}
+                    </button>
+                  </div>
                 </motion.div>
-                <Button type="submit" disabled={loading || !url.trim()} className="shrink-0">
-                  {loading ? t.analyzing : t.analyze}
-                </Button>
               </form>
 
               {/* Error — inline below form */}

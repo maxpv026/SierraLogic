@@ -9,6 +9,12 @@ import { prisma }                     from "@/lib/prisma";
 const BASE_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 
 export async function POST(req: NextRequest) {
+  // Guard: catch missing env vars early and return JSON (not an HTML crash page)
+  if (!process.env.STRIPE_SECRET_KEY) {
+    console.error("[STRIPE_CHECKOUT_ERROR] STRIPE_SECRET_KEY is not set");
+    return NextResponse.json({ error: "Stripe is not configured on this server" }, { status: 500 });
+  }
+
   const session = await getServerSession(authOptions);
   const userId  = (session?.user as { id?: string } | undefined)?.id;
 
@@ -28,7 +34,12 @@ export async function POST(req: NextRequest) {
     priceId = PLANS[planKey]?.priceId ?? "";
   }
   if (!priceId) {
-    return NextResponse.json({ error: "priceId or plan is required" }, { status: 400 });
+    const planName = typeof body.plan === "string" ? body.plan.toUpperCase() : "(none)";
+    console.error(`[STRIPE_CHECKOUT_ERROR] No priceId resolved — plan: ${planName}. Check STRIPE_PRO_PRICE_ID / STRIPE_MAX_PRICE_ID env vars.`);
+    return NextResponse.json(
+      { error: `No Stripe price configured for plan "${planName}". Check STRIPE_PRO_PRICE_ID / STRIPE_MAX_PRICE_ID.` },
+      { status: 400 },
+    );
   }
 
   const user = await prisma.user.findUnique({
@@ -42,22 +53,33 @@ export async function POST(req: NextRequest) {
     ? { customer: user.stripeCustomerId }
     : { customer_email: user.email ?? undefined };
 
-  const checkoutSession = await stripe.checkout.sessions.create({
-    mode:    "subscription",
-    ...customerParam,
-    line_items: [{ price: priceId, quantity: 1 }],
-    // Attach userId so the webhook can find the right DB record
-    client_reference_id: userId,
-    metadata:            { userId },
-    subscription_data:   { metadata: { userId } },
-    allow_promotion_codes: true,
-    success_url: `${BASE_URL}/settings?tab=ai-usage&success=true`,
-    cancel_url:  `${BASE_URL}/settings?tab=ai-usage&canceled=true`,
-  });
+  console.log(`[stripe/checkout] Creating session — userId: ${userId}, priceId: ${priceId}`);
 
-  if (!checkoutSession.url) {
-    return NextResponse.json({ error: "Failed to create checkout session" }, { status: 500 });
+  try {
+    const checkoutSession = await stripe.checkout.sessions.create({
+      mode:    "subscription",
+      ...customerParam,
+      line_items: [{ price: priceId, quantity: 1 }],
+      // Attach userId so the webhook can find the right DB record
+      client_reference_id: userId,
+      metadata:            { userId },
+      subscription_data:   { metadata: { userId } },
+      allow_promotion_codes: true,
+      // {CHECKOUT_SESSION_ID} is a Stripe template literal — replaced with the
+      // real session ID before the redirect, so the sync endpoint can retrieve it.
+      success_url: `${BASE_URL}/settings?tab=ai-usage&success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url:  `${BASE_URL}/settings?tab=ai-usage&canceled=true`,
+    });
+
+    if (!checkoutSession.url) {
+      console.error("[STRIPE_CHECKOUT_ERROR] Stripe returned a session with no URL");
+      return NextResponse.json({ error: "Stripe returned a session with no redirect URL" }, { status: 500 });
+    }
+
+    return NextResponse.json({ url: checkoutSession.url });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown Stripe error";
+    console.error("[STRIPE_CHECKOUT_ERROR]", err);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  return NextResponse.json({ url: checkoutSession.url });
 }

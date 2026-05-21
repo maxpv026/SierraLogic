@@ -78,16 +78,34 @@ export async function POST(req: NextRequest) {
   // --- Persist ---
   let record;
   try {
-    record = await prisma.analysisResult.create({
-      data: {
-        url,
-        topics: analysis.topics,
-        sentiment: analysis.sentiment,
-        summary: analysis.summary,
-        keywords: analysis.keywords,
-        ...(userId ? { userId } : {}),
-      },
-    });
+    [record] = await prisma.$transaction([
+      prisma.analysisResult.create({
+        data: {
+          url,
+          topics:    analysis.topics,
+          sentiment: analysis.sentiment,
+          summary:   analysis.summary,
+          keywords:  analysis.keywords,
+          ...(userId ? { userId } : {}),
+        },
+      }),
+      // Save AI-generated tasks with website context (for the AI fix generator)
+      ...(userId && analysis.tasks.length > 0
+        ? [prisma.task.createMany({
+            data: analysis.tasks.map((t) => ({
+              title:          t.title,
+              description:    t.description,
+              category:       t.category,
+              priority:       t.priority,
+              status:         "TODO",
+              userId,
+              // Store up to 4 KB of scraped text so the fix generator has context
+              websiteContext: scraped.text.slice(0, 4_000),
+            })),
+          })]
+        : []
+      ),
+    ]);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Database write failed";
     return NextResponse.json<ApiResponse>(
@@ -97,16 +115,14 @@ export async function POST(req: NextRequest) {
   }
 
   // Merge the Prisma record with AI-enriched fields not stored in the DB.
-  // sentiment is cast from string to the Sentiment union (safe — validated by parseAndValidate).
   const response: AnalysisResult = {
     ...record,
-    sentiment:      analysis.sentiment,
-    sentimentScore: analysis.sentimentScore,
-    category:       analysis.category,
-    designStyle:    analysis.designStyle,
-    // Pass the scraped text back so the client can use it as chat context.
-    // It is not stored in the DB — kept only in the client session.
-    scrapedText:    scraped.text,
+    sentiment:        analysis.sentiment,
+    sentimentScore:   analysis.sentimentScore,
+    category:         analysis.category,
+    designStyle:      analysis.designStyle,
+    scrapedText:      scraped.text,
+    boardOfDirectors: analysis.boardOfDirectors,
   };
 
   return NextResponse.json<ApiResponse<AnalysisResult>>(

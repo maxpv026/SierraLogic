@@ -23,16 +23,23 @@ export async function POST(req: NextRequest) {
   const rawBody  = await req.text();
   const signature = req.headers.get("stripe-signature") ?? "";
 
+  if (!WEBHOOK_SECRET) {
+    console.error("❌ STRIPE_WEBHOOK_SECRET is not set — cannot verify webhook signature");
+    return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 });
+  }
+
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(rawBody, signature, WEBHOOK_SECRET);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    console.error("[stripe/webhook] Signature verification failed:", msg);
+    console.error("❌ Webhook signature verification failed:", msg);
+    console.error("   stripe-signature header:", signature ? signature.slice(0, 40) + "…" : "(missing)");
+    console.error("   raw body length:", rawBody.length);
     return NextResponse.json({ error: `Webhook Error: ${msg}` }, { status: 400 });
   }
 
-  console.log(`[stripe/webhook] ${event.type} (${event.id})`);
+  console.log(`\n🔔 Webhook received: ${event.type} (id: ${event.id})`);
 
   try {
     switch (event.type) {
@@ -40,39 +47,99 @@ export async function POST(req: NextRequest) {
       // ── New subscription / plan upgrade ───────────────────────────────────
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        if (session.mode !== "subscription") break;
 
-        const userId = session.client_reference_id ?? session.metadata?.userId;
-        if (!userId) { console.warn("[stripe/webhook] checkout.session.completed: missing userId"); break; }
+        // ── Full session dump so nothing is hidden ─────────────────────────
+        console.log("📦 Session Metadata:", JSON.stringify(session.metadata, null, 2));
+        console.log("👤 Client Reference ID (User ID):", session.client_reference_id);
+        console.log("🔑 Session ID:", session.id);
+        console.log("💳 Mode:", session.mode);
+        console.log("📋 Subscription ID:", session.subscription);
 
+        if (session.mode !== "subscription") {
+          console.log("⏭  Not a subscription session — skipping");
+          break;
+        }
+
+        // ── userId extraction ──────────────────────────────────────────────
+        const userId = session.client_reference_id ?? session.metadata?.userId ?? null;
+        console.log("👤 Resolved userId:", userId);
+        if (!userId) {
+          console.error(
+            "❌ No userId found in client_reference_id or metadata.userId.\n" +
+            "   Verify that stripe.checkout.sessions.create() sets client_reference_id: userId.",
+          );
+          break;
+        }
+
+        // ── subscriptionId ─────────────────────────────────────────────────
         const subId = strId(session.subscription);
-        if (!subId) { console.warn("[stripe/webhook] checkout.session.completed: missing subscriptionId"); break; }
+        console.log("📄 Resolved subscriptionId:", subId);
+        if (!subId) {
+          console.error("❌ Missing subscription ID in session");
+          break;
+        }
 
+        // ── Retrieve subscription to get priceId ───────────────────────────
+        console.log("⏳ Retrieving subscription from Stripe…");
         const subscription = await stripe.subscriptions.retrieve(subId, {
           expand: ["latest_invoice"],
         });
 
-        const priceId    = subscription.items.data[0]?.price?.id ?? "";
-        const plan        = planFromPriceId(priceId) ?? "FREE";
-        const customerId  = strId(subscription.customer);
+        // Try subscription items first; fall back to session metadata
+        const priceIdFromSub      = subscription.items.data[0]?.price?.id ?? "";
+        const priceIdFromMeta     = session.metadata?.priceId ?? "";
+        const priceId             = priceIdFromSub || priceIdFromMeta;
 
-        // Period end comes from the subscription's latest invoice
-        // (current_period_end was removed in the 2026-04-22 API)
+        console.log("💰 Price ID from subscription items:", priceIdFromSub);
+        console.log("💰 Price ID from session metadata:  ", priceIdFromMeta);
+        console.log("💰 Price ID used for plan lookup:   ", priceId);
+
+        // ── Plan resolution ────────────────────────────────────────────────
+        const planKey = planFromPriceId(priceId);
+        console.log("🗺  planFromPriceId result:", planKey ?? "null (unrecognised)");
+        console.log(
+          "   ENV STRIPE_PRO_PRICE_ID      :", process.env.STRIPE_PRO_PRICE_ID ?? "(not set)",
+          "\n   ENV NEXT_PUBLIC_STRIPE_PRO_ID:", process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID ?? "(not set)",
+          "\n   ENV STRIPE_MAX_PRICE_ID      :", process.env.STRIPE_MAX_PRICE_ID ?? "(not set)",
+          "\n   ENV NEXT_PUBLIC_STRIPE_MAX_ID:", process.env.NEXT_PUBLIC_STRIPE_MAX_PRICE_ID ?? "(not set)",
+        );
+
+        if (!planKey) {
+          console.error(
+            `❌ Unrecognised priceId "${priceId}" — plan NOT updated.\n` +
+            `   Set STRIPE_PRO_PRICE_ID / STRIPE_MAX_PRICE_ID (or NEXT_PUBLIC_ variants) to match this priceId.`,
+          );
+          break;
+        }
+
+        // ── Build update payload ───────────────────────────────────────────
+        const customerId = strId(subscription.customer);
         const invoice    = subscription.latest_invoice as Stripe.Invoice | null;
         const periodEnd  = invoice ? new Date(invoice.period_end * 1000) : null;
 
-        await prisma.user.update({
-          where: { id: userId },
-          data: {
-            plan,
-            stripeCustomerId:       customerId      ?? undefined,
-            stripeSubscriptionId:   subId,
-            stripePriceId:          priceId         || undefined,
-            stripeCurrentPeriodEnd: periodEnd       ?? undefined,
-          },
-        });
+        console.log("🏪 customerId:", customerId);
+        console.log("📅 Period end:", periodEnd?.toISOString() ?? "n/a");
 
-        console.log(`[stripe/webhook] User ${userId} → ${plan}`);
+        // ── Prisma update with isolated try/catch ─────────────────────────
+        try {
+          const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: {
+              plan:                   planKey,
+              stripeCustomerId:       customerId ?? undefined,
+              stripeSubscriptionId:   subId,
+              stripePriceId:          priceId    || undefined,
+              stripeCurrentPeriodEnd: periodEnd  ?? undefined,
+            },
+            select: { id: true, email: true, plan: true },
+          });
+          console.log("✅ DB successfully updated for user:", updatedUser.id, "Plan set to:", updatedUser.plan);
+        } catch (prismaError) {
+          console.error("❌ Prisma Database Update Failed:", prismaError);
+          // Return 500 so Stripe retries the webhook
+          return NextResponse.json({ error: "Database update failed" }, { status: 500 });
+        }
+
         break;
       }
 

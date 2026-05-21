@@ -14,6 +14,6 @@ export default withAuth({
 export const config = {
   // Protect everything except auth routes, API endpoints, login page, and Next.js internals
   matcher: [
-    "/((?!api/auth|api/analyze|api/history|api/chat|api/stripe/webhook|login|_next/static|_next/image|favicon\\.ico).*)",
+    "/((?!api/auth|api/analyze|api/history|api/chat|api/tasks|api/stripe/webhook|login|_next/static|_next/image|favicon\\.ico).*)",
   ],
 };

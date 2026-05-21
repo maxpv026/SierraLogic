@@ -14,12 +14,23 @@ export async function PUT(req: NextRequest) {
   try { body = await req.json(); }
   catch { return NextResponse.json({ success: false, error: "Invalid JSON" }, { status: 400 }); }
 
-  const updates: { name?: string | null; image?: string | null; jobTitle?: string | null; company?: string | null } = {};
+  const VALID_LANGS = new Set(["en", "uk", "de", "fr", "pl"]);
+
+  const updates: {
+    name?:     string | null;
+    image?:    string | null;
+    jobTitle?: string | null;
+    company?:  string | null;
+    language?: string;
+  } = {};
   if (typeof body.name === "string")     updates.name     = body.name.trim()     || null;
   if (typeof body.jobTitle === "string") updates.jobTitle = body.jobTitle.trim() || null;
   if (typeof body.company === "string")  updates.company  = body.company.trim()  || null;
   if (typeof body.image === "string" || body.image === null) {
     updates.image = body.image === "" ? null : (body.image as string | null);
+  }
+  if (typeof body.language === "string" && VALID_LANGS.has(body.language)) {
+    updates.language = body.language;
   }
 
   if (!Object.keys(updates).length) {

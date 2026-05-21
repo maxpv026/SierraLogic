@@ -87,16 +87,34 @@ export const authOptions: NextAuthOptions = {
   pages:   { signIn: "/login" },
 
   callbacks: {
-    async jwt({ token, trigger, session }) {
-      if (trigger === "update" && session) {
-        if (typeof session.name  === "string")                           token.name    = session.name;
-        if (typeof session.image === "string" || session.image === null) token.picture = session.image as string | null;
+    async jwt({ token, user, trigger, session }) {
+      // First sign-in: hydrate token with DB fields not returned by authorize()
+      if (user?.id) {
+        const dbUser = await prisma.user.findUnique({
+          where:  { id: user.id as string },
+          select: { language: true, plan: true },
+        });
+        token.language = dbUser?.language ?? "en";
+        token.plan     = dbUser?.plan     ?? "FREE";
       }
+
+      // Manual session update (e.g. profile save, language change, plan upgrade)
+      if (trigger === "update" && session) {
+        if (typeof session.name     === "string")                           token.name     = session.name;
+        if (typeof session.image    === "string" || session.image === null) token.picture  = session.image as string | null;
+        if (typeof session.language === "string")                           token.language = session.language;
+        if (typeof session.plan     === "string")                           token.plan     = session.plan;
+      }
+
       return token;
     },
+
     async session({ session, token }) {
       if (session.user && token.sub) {
-        (session.user as { id?: string }).id = token.sub;
+        const u = session.user as { id?: string; language?: string; plan?: string };
+        u.id       = token.sub;
+        u.language = (token.language as string | undefined) ?? "en";
+        u.plan     = (token.plan     as string | undefined) ?? "FREE";
       }
       return session;
     },

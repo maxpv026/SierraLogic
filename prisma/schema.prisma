@@ -24,10 +24,43 @@ model User {
   stripePriceId            String?
   stripeCurrentPeriodEnd   DateTime?
   plan                     String           @default("FREE")
+  language                 String           @default("en")
   createdAt            DateTime         @default(now())
   accounts        Account[]
   sessions        Session[]
   analysisResults AnalysisResult[]
+  tasks           Task[]
+  leads           Lead[]
+}
+
+model Lead {
+  id              String   @id @default(cuid())
+  url             String
+  companyName     String?
+  identifiedFlaws Json
+  coldEmailDraft  String   @db.Text
+  status          String   @default("DRAFT")
+  userId          String
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Task {
+  id              String   @id @default(cuid())
+  title           String
+  description     String   @db.Text
+  status          String   @default("TODO")
+  category        String
+  priority        String
+  userId          String
+  solution        String?  @db.Text
+  websiteContext  String?  @db.Text
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Account {

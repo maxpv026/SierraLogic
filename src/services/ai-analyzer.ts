@@ -1,109 +1,209 @@
 import { openai } from "@/lib/ai";
-import type { AIAnalysis, Sentiment } from "@/types";
+import type {
+  Sentiment, BoardData,
+  SeoAgentResult, MarketingAgentResult, UxAgentResult,
+  TaskInput, TaskCategory, TaskPriority,
+} from "@/types";
 
-const MAX_INPUT_CHARS = 20_000;
+const MAX_INPUT_CHARS = 10_000;
 
-const VALID_SENTIMENTS = new Set<string>(["positive", "neutral", "negative"]);
+// ─── System prompts ───────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are an expert B2B Content & SEO Analyst. Analyze the provided webpage text and return a strictly structured JSON object.
-
-Return ONLY a valid JSON object with these EXACT fields — no markdown, no explanation:
+const SEO_SYSTEM = `You are a ruthless Technical SEO Lead with 15 years of experience.
+Identify opportunities and critical failures in website SEO.
+Return ONLY a valid JSON object — no markdown, no explanation.
 
 {
-  "topics":         [string, string, string],
-  "sentiment":      "positive" | "neutral" | "negative",
-  "sentimentScore": number,
-  "summary":        string,
-  "keywords":       [string, ...string[]],
-  "category":       string,
-  "designStyle":    string
+  "keywords":         [<up to 8 primary SEO keywords — found or conspicuously missing>],
+  "topics":           [<2–5 main content topics, concise noun phrases>],
+  "technicalGaps":    [<up to 5 specific SEO issues: thin content, missing CTAs, no schema, etc.>],
+  "seoScore":         <integer 0–100>,
+  "optimizationPlan": "<2–3 concrete sentences on the highest-impact improvements>"
+}`;
+
+const MARKETING_SYSTEM = `You are a creative, conversion-focused Chief Marketing Officer.
+Evaluate how effectively the content attracts, engages, and converts visitors.
+Return ONLY a valid JSON object — no markdown, no explanation.
+
+{
+  "targetAudience":   "<specific audience description>",
+  "toneOfVoice":      "<brand voice: e.g. Authoritative, Conversational, Playful>",
+  "emotionalAppeal":  "<what emotions the content evokes and whether they drive conversion>",
+  "ctaEffectiveness": "<are CTAs present, clear, and compelling? 1–2 sentences>",
+  "marketingScore":   <integer 0–100>,
+  "sentiment":        "<positive|neutral|negative>",
+  "sentimentScore":   <integer 0–100, where 0=very negative 100=very positive>,
+  "summary":          "<2-sentence executive summary of the site value proposition>",
+  "category":         "<site type, e.g. B2B SaaS, E-commerce, News Platform, Portfolio>"
+}`;
+
+const TASK_SYSTEM = `You are a strategic web consultant turning website weaknesses into an actionable improvement roadmap.
+Return ONLY a valid JSON object — no markdown, no explanation.
+
+{
+  "tasks": [
+    {
+      "title":       "<action-verb phrase, max 8 words>",
+      "description": "<1-2 sentences: exactly what to do and why it matters>",
+      "category":    "<SEO|MARKETING|UX>",
+      "priority":    "<HIGH|MEDIUM|LOW>"
+    }
+  ]
 }
 
-Field rules:
-- topics:         3–5 strings, each ≤ 6 words, concrete and specific to the content
-- sentiment:      exactly one of "positive", "neutral", "negative"
-- sentimentScore: integer 0–100 (0 = very negative, 50 = neutral, 100 = very positive); must be consistent with the sentiment label (positive ≥ 60, neutral 35–65, negative ≤ 40)
-- summary:        exactly 2 sentences for a B2B executive audience
-- keywords:       exactly 7 strings, lowercase, mix of single words and short phrases, ordered by relevance
-- category:       ONE concise label for the site type — choose the best fit from examples like "News Platform", "E-commerce", "B2B SaaS", "Corporate Blog", "Portfolio", "Education", "Healthcare", "Government", "Real Estate", "Finance", "Tech Media", "NGO / Non-profit" — or coin a clear alternative
-- designStyle:    2–4 comma-separated adjectives describing the content style, e.g. "Minimalist, Data-heavy", "Visual-first, Long-form", "Dark mode, Typography-focused", "Corporate, Dense text"`;
+Generate exactly 6 tasks. Distribute across categories (2 SEO, 2 MARKETING, 2 UX). Order by impact descending.
+Assign HIGH priority only to tasks that directly hurt revenue or rankings.`;
 
-function clamp(n: number, min: number, max: number) { return Math.max(min, Math.min(max, n)); }
+const UX_SYSTEM = `You are an empathetic, detail-oriented Lead UX Researcher.
+Find friction in the user journey and surface accessibility concerns.
+Return ONLY a valid JSON object — no markdown, no explanation.
 
-function parseAndValidate(raw: string): AIAnalysis {
-  let parsed: unknown;
+{
+  "navigationClarity":   "<assessment of navigation clarity from the scraped content>",
+  "accessibilityIssues": [<up to 4 potential accessibility concerns inferred from content structure>],
+  "userJourneyFriction": "<key friction points for a first-time visitor>",
+  "uxScore":             <integer 0–100>,
+  "designStyle":         "<2–4 comma-separated design style descriptors>"
+}`;
+
+// ─── Parsers ──────────────────────────────────────────────────────────────────
+
+function clampInt(v: unknown, fallback: number): number {
+  const n = typeof v === "number" ? v : Number(v);
+  return isNaN(n) ? fallback : Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function strArr(v: unknown, max: number): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.slice(0, max)
+    .map((s) => (typeof s === "string" ? s.trim() : ""))
+    .filter(Boolean);
+}
+
+function str(v: unknown, fallback = ""): string {
+  return typeof v === "string" && v.trim() ? v.trim().slice(0, 600) : fallback;
+}
+
+function parseSeo(raw: string): SeoAgentResult {
+  const p = JSON.parse(raw) as Record<string, unknown>;
+  return {
+    keywords:         strArr(p.keywords, 8),
+    topics:           strArr(p.topics, 5),
+    technicalGaps:    strArr(p.technicalGaps, 5),
+    seoScore:         clampInt(p.seoScore, 50),
+    optimizationPlan: str(p.optimizationPlan, "No plan returned."),
+  };
+}
+
+function parseMarketing(raw: string): MarketingAgentResult {
+  const p    = JSON.parse(raw) as Record<string, unknown>;
+  const rawS = str(p.sentiment, "neutral").toLowerCase();
+  const sentiment = (["positive", "neutral", "negative"].includes(rawS)
+    ? rawS : "neutral") as Sentiment;
+  return {
+    targetAudience:   str(p.targetAudience, "Unknown"),
+    toneOfVoice:      str(p.toneOfVoice,    "Neutral"),
+    emotionalAppeal:  str(p.emotionalAppeal,  ""),
+    ctaEffectiveness: str(p.ctaEffectiveness, ""),
+    marketingScore:   clampInt(p.marketingScore, 50),
+    sentiment,
+    sentimentScore:   clampInt(p.sentimentScore, 50),
+    summary:          str(p.summary,  "No summary available."),
+    category:         str(p.category, "General"),
+  };
+}
+
+function parseUx(raw: string): UxAgentResult {
+  const p = JSON.parse(raw) as Record<string, unknown>;
+  return {
+    navigationClarity:   str(p.navigationClarity,   ""),
+    accessibilityIssues: strArr(p.accessibilityIssues, 4),
+    userJourneyFriction: str(p.userJourneyFriction, ""),
+    uxScore:             clampInt(p.uxScore, 50),
+    designStyle:         str(p.designStyle, ""),
+  };
+}
+
+const VALID_CATEGORIES = new Set<string>(["SEO", "MARKETING", "UX"]);
+const VALID_PRIORITIES  = new Set<string>(["HIGH", "MEDIUM", "LOW"]);
+
+function parseTasks(raw: string): TaskInput[] {
   try {
-    parsed = JSON.parse(raw);
+    const p = JSON.parse(raw) as Record<string, unknown>;
+    if (!Array.isArray(p.tasks)) return [];
+    return p.tasks.slice(0, 7).flatMap((t): TaskInput[] => {
+      const task = t as Record<string, unknown>;
+      const cat  = str(task.category, "").toUpperCase();
+      const pri  = str(task.priority,  "").toUpperCase();
+      return [{
+        title:       str(task.title,       "Improvement task").slice(0, 120),
+        description: str(task.description, "").slice(0, 400),
+        category:    (VALID_CATEGORIES.has(cat) ? cat : "SEO") as TaskCategory,
+        priority:    (VALID_PRIORITIES.has(pri)  ? pri : "MEDIUM") as TaskPriority,
+      }];
+    });
   } catch {
-    throw new Error("AI returned malformed JSON");
+    return [];
   }
-
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("AI response is not a JSON object");
-  }
-
-  const obj = parsed as Record<string, unknown>;
-
-  const topics = Array.isArray(obj.topics)
-    ? obj.topics.filter((t): t is string => typeof t === "string").slice(0, 5)
-    : [];
-
-  const sentiment: Sentiment = VALID_SENTIMENTS.has(obj.sentiment as string)
-    ? (obj.sentiment as Sentiment)
-    : "neutral";
-
-  const rawScore = typeof obj.sentimentScore === "number" ? obj.sentimentScore : 50;
-  const sentimentScore = clamp(Math.round(rawScore), 0, 100);
-
-  const summary = typeof obj.summary === "string" ? obj.summary.trim() : "";
-
-  const keywords = Array.isArray(obj.keywords)
-    ? obj.keywords.filter((k): k is string => typeof k === "string").slice(0, 7)
-    : [];
-
-  const category = typeof obj.category === "string" && obj.category.trim()
-    ? obj.category.trim()
-    : "General";
-
-  const designStyle = typeof obj.designStyle === "string"
-    ? obj.designStyle.trim()
-    : "";
-
-  return { topics, sentiment, sentimentScore, summary, keywords, category, designStyle };
 }
 
-export async function analyzeContent(text: string, language = "English"): Promise<AIAnalysis> {
-  const input = text.length > MAX_INPUT_CHARS ? text.slice(0, MAX_INPUT_CHARS) : text;
+// ─── Exported analysis result type ───────────────────────────────────────────
 
-  const systemPrompt =
-    SYSTEM_PROMPT +
-    `\n\nIMPORTANT: Write ALL output — summary, topics, keywords, category, and designStyle — in ${language}. Do not mix languages.`;
+export interface MultiAgentAnalysis {
+  topics:           string[];
+  sentiment:        Sentiment;
+  sentimentScore:   number;
+  summary:          string;
+  keywords:         string[];
+  category:         string;
+  designStyle:      string;
+  boardOfDirectors: BoardData;
+  tasks:            TaskInput[];
+}
 
-  let raw: string | null;
-  try {
-    const completion = await openai.chat.completions.create({
+// ─── Main export ──────────────────────────────────────────────────────────────
+
+export async function analyzeContent(
+  text:     string,
+  language = "English",
+): Promise<MultiAgentAnalysis> {
+  const input       = text.slice(0, MAX_INPUT_CHARS);
+  const langNote    = `\nIMPORTANT: Write ALL text fields in ${language}. Do not mix languages.`;
+  const userContent = `${langNote}\n\nCONTENT:\n${input}`;
+
+  const call = (system: string) =>
+    openai.chat.completions.create({
       model:           "gpt-4o-mini",
       response_format: { type: "json_object" },
       temperature:     0.2,
       messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user",   content: input },
+        { role: "system", content: system },
+        { role: "user",   content: userContent },
       ],
     });
 
-    raw = completion.choices[0]?.message?.content ?? null;
-  } catch (err) {
-    if (err instanceof TypeError && err.message.includes("ByteString")) {
-      throw new Error(
-        "OPENAI_API_KEY contains non-ASCII characters. " +
-        "Please set a valid API key (starting with 'sk-') in .env.local.",
-      );
-    }
-    const message = err instanceof Error ? err.message : "Unknown OpenAI error";
-    throw new Error(`OpenAI API call failed: ${message}`);
-  }
+  // Fan-out: all 4 agents run concurrently
+  const [seoRes, mktRes, uxRes, taskRes] = await Promise.all([
+    call(SEO_SYSTEM),
+    call(MARKETING_SYSTEM),
+    call(UX_SYSTEM),
+    call(TASK_SYSTEM),
+  ]);
 
-  if (!raw) throw new Error("OpenAI returned an empty response");
+  const seo   = parseSeo(seoRes.choices[0]?.message?.content   ?? "{}");
+  const mkt   = parseMarketing(mktRes.choices[0]?.message?.content ?? "{}");
+  const ux    = parseUx(uxRes.choices[0]?.message?.content     ?? "{}");
+  const tasks = parseTasks(taskRes.choices[0]?.message?.content ?? "{}");
 
-  return parseAndValidate(raw);
+  return {
+    topics:         seo.topics.length ? seo.topics : ["General"],
+    sentiment:      mkt.sentiment,
+    sentimentScore: mkt.sentimentScore,
+    summary:        mkt.summary,
+    keywords:       seo.keywords,
+    category:       mkt.category,
+    designStyle:    ux.designStyle,
+    boardOfDirectors: { seo, marketing: mkt, ux },
+    tasks,
+  };
 }

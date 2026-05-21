@@ -1,0 +1,59 @@
+version: "3.9"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SierraLogic — Production Docker Compose
+#
+# No local database service is defined here because the application connects
+# to Supabase (external managed PostgreSQL). The DATABASE_URL and all other
+# secrets are injected at runtime via the .env file (never committed to git).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+services:
+  sierralogic-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Cache busting: pass the git SHA so Docker rebuilds when code changes
+      # Override on CI/CD: docker-compose build --build-arg GIT_SHA=$(git rev-parse HEAD)
+      args:
+        - GIT_SHA=${GIT_SHA:-local}
+
+    container_name: sierralogic-app
+
+    # Automatically restart the container on crashes or server reboots
+    restart: always
+
+    ports:
+      # HOST_PORT:CONTAINER_PORT
+      # Change 3000:3000 to 80:3000 if Nginx/Caddy is NOT used as a reverse proxy
+      - "3000:3000"
+
+    # All sensitive runtime secrets (DATABASE_URL, OPENAI_API_KEY, STRIPE_*, etc.)
+    # are read from the .env file on the HOST — never baked into the image.
+    env_file:
+      - .env
+
+    # Explicit production environment override (safe to duplicate from .env)
+    environment:
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+
+    # Health check — Docker will mark the container unhealthy if Next.js stops
+    # responding, enabling orchestrators (Swarm, ECS, etc.) to restart it.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Prevent the container from acquiring new privileges after startup
+    security_opt:
+      - no-new-privileges:true
+
+    # Optional: limit resource consumption to protect the host
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "1.0"
+    #       memory: 512M

@@ -1,0 +1,46 @@
+# ── Version control ────────────────────────────────────────────────────────────
+.git
+.gitignore
+.gitattributes
+
+# ── Node / build artefacts ─────────────────────────────────────────────────────
+node_modules
+.next
+out
+dist
+
+# ── Environment files (injected at runtime via docker-compose env_file) ────────
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+
+# ── Prisma generated client (rebuilt inside the image by prisma generate) ──────
+src/generated
+
+# ── Logs & caches ──────────────────────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+.turbo
+.cache
+
+# ── OS / editor artefacts ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea
+.vscode
+
+# ── CI / testing ───────────────────────────────────────────────────────────────
+coverage
+.nyc_output
+cypress
+playwright-report
+
+# ── Docker files themselves (no need in build context) ─────────────────────────
+Dockerfile
+docker-compose.yml

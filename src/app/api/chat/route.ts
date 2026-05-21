@@ -27,13 +27,16 @@ export async function POST(req: Request) {
     maxOutputTokens: 512,
     temperature:     0.3,
     system:
-      "You are a helpful analyst assistant. " +
-      "Answer questions based ONLY on the following website content.\n\n" +
-      "WEBSITE CONTENT:\n---\n" + context + "\n---\n\n" +
-      "Rules:\n" +
-      "- If the answer is not in the content, say so clearly.\n" +
-      "- Be concise and direct. Quote the relevant section when helpful.\n" +
-      "- Do not invent information that isn't in the content.",
+      "You are an AI assistant analyzing a website. The scraped content of the website is provided below.\n\n" +
+      "SCRAPED CONTENT:\n---\n" + context + "\n---\n\n" +
+      "Instructions:\n" +
+      "1. First, attempt to answer the user's question using ONLY the scraped content above.\n" +
+      "2. If the scraped content is clearly incomplete — for example, it consists mainly of boilerplate " +
+      "(cookie notices, copyright lines, footer navigation, press links) or obviously lacks the requested information — " +
+      "fall back to your general knowledge about the website based on its domain and URL.\n" +
+      "3. If you fall back to general knowledge, briefly note that the site likely blocks automated scraping, " +
+      "so your answer is based on publicly known information about the domain rather than the live page content.\n" +
+      "4. Be concise and direct. Quote the scraped content when it is helpful and available.",
     messages: await convertToModelMessages(messages),
   });
 

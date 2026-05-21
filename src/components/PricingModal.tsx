@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal }        from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { Loader2, X, Check, Sparkles, Zap, Infinity } from "lucide-react";
@@ -49,17 +50,50 @@ const PRICING_PLANS = [
 
 type PlanId = (typeof PRICING_PLANS)[number]["id"];
 
+// Resolved at build time from NEXT_PUBLIC_ env vars — safe to expose (price IDs are not secret)
+const PRICE_IDS: Record<PlanId, string | undefined> = {
+  PRO: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID,
+  MAX: process.env.NEXT_PUBLIC_STRIPE_MAX_PRICE_ID,
+};
+
 // ─── Checkout helper ──────────────────────────────────────────────────────────
 
 async function startCheckout(plan: PlanId, setLoading: (p: PlanId | null) => void) {
+  if (!plan) {
+    toast.error("No plan selected.");
+    return;
+  }
+
+  // Validate price ID client-side before making any network request
+  const priceId = PRICE_IDS[plan];
+  if (!priceId || priceId.toLowerCase().includes("replace")) {
+    toast.error(
+      `Stripe Price ID for ${plan} is missing. Set NEXT_PUBLIC_STRIPE_${plan}_PRICE_ID in .env.local and restart the dev server.`,
+    );
+    return;
+  }
+
   setLoading(plan);
   try {
     const res = await fetch("/api/stripe/checkout", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ plan }),
+      // Send both — server uses priceId directly, plan is kept for logging/metadata
+      body:    JSON.stringify({ plan, priceId }),
     });
-    const data = await res.json();
+
+    // Parse JSON safely — a server crash returns HTML, which would throw here
+    let data: { url?: string; error?: string };
+    try {
+      data = await res.json();
+    } catch {
+      const text = await res.text().catch(() => "");
+      console.error("[checkout] Non-JSON response:", res.status, text.slice(0, 300));
+      toast.error(`Server error (${res.status}) — check server logs.`);
+      setLoading(null);
+      return;
+    }
+
     if (data.url) {
       window.location.href = data.url;
     } else {
@@ -67,7 +101,7 @@ async function startCheckout(plan: PlanId, setLoading: (p: PlanId | null) => voi
       setLoading(null);
     }
   } catch {
-    toast.error("Network error — please try again.");
+    toast.error("Network error — could not reach the server.");
     setLoading(null);
   }
 }
@@ -95,8 +129,8 @@ function PricingCard({
       className={cn(
         "relative flex flex-col rounded-2xl border p-6 transition-all",
         plan.popular
-          ? "border-indigo-500 bg-indigo-950/30 dark:bg-indigo-950/40 shadow-lg shadow-indigo-500/10"
-          : "border-border bg-card",
+          ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 shadow-lg shadow-indigo-500/10"
+          : "border-border bg-white dark:bg-zinc-900",
       )}
     >
       {/* Most popular badge */}
@@ -174,39 +208,42 @@ interface PricingModalProps {
 
 export function PricingModal({ open, onClose, currentPlan }: PricingModalProps) {
   const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null);
+  // createPortal requires the DOM to be available — guard for SSR
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   function handleSelect(plan: PlanId) {
     startCheckout(plan, setLoadingPlan);
   }
 
-  return (
+  const modal = (
     <AnimatePresence>
       {open && (
         <>
-          {/* Backdrop */}
+          {/* Backdrop — rendered on document.body so no stacking-context trap */}
           <motion.div
-            key="backdrop"
-            className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
+            key="pricing-backdrop"
+            className="fixed inset-0 z-[99] bg-black/40 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
           />
 
-          {/* Modal */}
+          {/* Modal card */}
           <motion.div
-            key="modal"
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            key="pricing-modal"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
             initial={{ opacity: 0, scale: 0.96, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 16 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
           >
-            <div className="relative w-full max-w-2xl rounded-2xl border border-border bg-background shadow-2xl">
+            <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-white shadow-2xl dark:bg-zinc-950">
               {/* Close */}
               <button
                 onClick={onClose}
-                className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 aria-label="Close"
               >
                 <X className="h-4 w-4" />
@@ -235,7 +272,7 @@ export function PricingModal({ open, onClose, currentPlan }: PricingModalProps) 
                 ))}
               </div>
 
-              {/* Footer note */}
+              {/* Footer */}
               <div className="border-t border-border px-6 py-3 text-center">
                 <p className="text-xs text-muted-foreground">
                   Billed monthly. Cancel anytime from your billing portal.
@@ -249,4 +286,9 @@ export function PricingModal({ open, onClose, currentPlan }: PricingModalProps) 
       )}
     </AnimatePresence>
   );
+
+  // Mount into document.body so Framer Motion transforms on ancestor elements
+  // cannot create a new stacking context that clips position:fixed children.
+  if (!mounted) return null;
+  return createPortal(modal, document.body);
 }
