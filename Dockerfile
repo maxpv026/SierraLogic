@@ -38,6 +38,13 @@ RUN npx prisma generate
 # Disable Next.js telemetry and set production mode before building
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=3072"
+
+# Dummy build-time values — Next.js instantiates the OpenAI/Stripe SDK clients
+# at module load during static generation; real secrets are injected at
+# runtime via the .env file on the host (see docker-compose.yml env_file).
+ENV OPENAI_API_KEY="sk-dummy-key-for-build"
+ENV STRIPE_SECRET_KEY="sk_test_dummy"
 
 RUN npm run build
 
