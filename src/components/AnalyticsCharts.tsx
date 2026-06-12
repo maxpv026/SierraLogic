@@ -223,7 +223,7 @@ export function AnalyticsCharts({ result }: AnalyticsChartsProps) {
       <ContentRadarChart result={result} />
 
       {/* Row 3 — stat pills */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Stat label="Topics"   value={result.topics.length} />
         <Stat label="Keywords" value={result.keywords.length} />
         <Stat label="Category" value={result.category ?? "—"} />

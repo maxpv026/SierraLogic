@@ -9,6 +9,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { scrapeWebsite } from "@/services/scraper";
 import { analyzeContent } from "@/services/ai-analyzer";
+import type { AiProvider } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import type { ApiResponse, AnalysisResult, BoardData, TaskInput } from "@/types";
@@ -50,6 +51,9 @@ export async function POST(req: NextRequest) {
   const rawLang = b?.language;
   const language = typeof rawLang === "string" && rawLang.trim() ? rawLang.trim() : undefined;
 
+  const rawProvider = b?.aiProvider;
+  const provider: AiProvider = rawProvider === "anthropic" ? "anthropic" : "openai";
+
   if (!parsedUrl) {
     return NextResponse.json<ApiResponse>(
       { success: false, error: "A valid http:// or https:// URL is required" },
@@ -64,8 +68,9 @@ export async function POST(req: NextRequest) {
   const cached = await prisma.analysisResult.findFirst({
     where: {
       url,
-      language:  cacheLang,
-      createdAt: { gte: new Date(Date.now() - CACHE_TTL_MS) },
+      language:   cacheLang,
+      aiProvider: provider,
+      createdAt:  { gte: new Date(Date.now() - CACHE_TTL_MS) },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -116,7 +121,7 @@ export async function POST(req: NextRequest) {
   // --- AI analysis ---
   let analysis;
   try {
-    analysis = await analyzeContent(scraped.text, language);
+    analysis = await analyzeContent(scraped.text, language, provider);
   } catch (err) {
     const message = err instanceof Error ? err.message : "AI analysis failed";
     return NextResponse.json<ApiResponse>(
@@ -145,6 +150,7 @@ export async function POST(req: NextRequest) {
           scrapedText:      scraped.text,
           boardOfDirectors: analysis.boardOfDirectors as unknown as Prisma.InputJsonValue,
           cachedTasks:      analysis.tasks as unknown as Prisma.InputJsonValue,
+          aiProvider:       provider,
         },
       }),
       // Save AI-generated tasks with website context (for the AI fix generator)

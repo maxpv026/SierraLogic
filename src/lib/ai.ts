@@ -24,37 +24,57 @@ function extractText(message: Anthropic.Messages.Message): string {
 // Tries OpenAI first; on failure falls back to Anthropic Claude so a single
 // provider outage doesn't take down analysis.
 
+export type AiProvider = "openai" | "anthropic";
+
 interface ChatJSONParams {
   system: string;
   user: string;
   temperature?: number;
   model?: string;
+  provider?: AiProvider;
 }
 
-export async function chatJSON({ system, user, temperature = 0.2, model = "gpt-4o-mini" }: ChatJSONParams): Promise<string> {
+async function callOpenaiJSON({ system, user, temperature, model }: { system: string; user: string; temperature: number; model: string }): Promise<string> {
+  const completion = await openai.chat.completions.create({
+    model,
+    response_format: { type: "json_object" },
+    temperature,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+  });
+  const content = completion.choices[0]?.message?.content;
+  if (!content) throw new Error("OpenAI returned empty content");
+  return content;
+}
+
+async function callAnthropicJSON({ system, user, temperature }: { system: string; user: string; temperature: number }): Promise<string> {
+  const message = await anthropic.messages.create({
+    model: ANTHROPIC_MODEL,
+    max_tokens: 2048,
+    temperature,
+    system: `${system}\n\nRespond with ONLY the raw JSON object — no markdown code fences, no commentary.`,
+    messages: [{ role: "user", content: user }],
+  });
+  return extractText(message);
+}
+
+export async function chatJSON({ system, user, temperature = 0.2, model = "gpt-4o-mini", provider = "openai" }: ChatJSONParams): Promise<string> {
+  if (provider === "anthropic") {
+    try {
+      return await callAnthropicJSON({ system, user, temperature });
+    } catch (err) {
+      console.error("[ai] Anthropic request failed, falling back to OpenAI:", err);
+      return await callOpenaiJSON({ system, user, temperature, model });
+    }
+  }
+
   try {
-    const completion = await openai.chat.completions.create({
-      model,
-      response_format: { type: "json_object" },
-      temperature,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    });
-    const content = completion.choices[0]?.message?.content;
-    if (!content) throw new Error("OpenAI returned empty content");
-    return content;
+    return await callOpenaiJSON({ system, user, temperature, model });
   } catch (err) {
     console.error("[ai] OpenAI request failed, falling back to Anthropic:", err);
-    const message = await anthropic.messages.create({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 2048,
-      temperature,
-      system: `${system}\n\nRespond with ONLY the raw JSON object — no markdown code fences, no commentary.`,
-      messages: [{ role: "user", content: user }],
-    });
-    return extractText(message);
+    return await callAnthropicJSON({ system, user, temperature });
   }
 }
 

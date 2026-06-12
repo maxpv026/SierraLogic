@@ -1,4 +1,4 @@
-import { chatJSON } from "@/lib/ai";
+import { chatJSON, type AiProvider } from "@/lib/ai";
 import type {
   Sentiment, BoardData,
   SeoAgentResult, MarketingAgentResult, UxAgentResult,
@@ -166,12 +166,13 @@ export interface MultiAgentAnalysis {
 export async function analyzeContent(
   text:     string,
   language = "English",
+  provider: AiProvider = "openai",
 ): Promise<MultiAgentAnalysis> {
   const input       = text.slice(0, MAX_INPUT_CHARS);
   const langNote    = `\nIMPORTANT: Write ALL text fields in ${language}. Do not mix languages.`;
   const userContent = `${langNote}\n\nCONTENT:\n${input}`;
 
-  const call = (system: string) => chatJSON({ system, user: userContent, temperature: 0.2 });
+  const call = (system: string) => chatJSON({ system, user: userContent, temperature: 0.2, provider });
 
   // Fan-out: all 4 agents run concurrently
   const [seoRaw, mktRaw, uxRaw, taskRaw] = await Promise.all([

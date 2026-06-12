@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2, TrendingUp, TrendingDown, Minus, Globe,
   Sun, Moon, PanelLeft, ChevronRight, Layers, Settings, LogOut, ChevronUp, BarChart2, X, Swords,
-  Trophy, Lightbulb, Plus, Eye, Briefcase, ListChecks,
+  Trophy, Lightbulb, Plus, Eye, Briefcase, ListChecks, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AnalyticsCharts } from "@/components/AnalyticsCharts";
@@ -28,6 +28,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import type { AnalysisResult, ApiResponse, CompareResult, Sentiment, TaskItem, VisionResult } from "@/types";
+import type { AiProvider } from "@/lib/ai";
 
 import { LABELS, LANG_NAMES, type Lang } from "@/lib/i18n";
 import { useLang } from "@/lib/i18n-context";
@@ -64,6 +65,16 @@ const PLATFORM_MODES: Array<{ value: string } & Record<Lang, string>> = [
   { value: "standard", en: "Standard Analysis", uk: "Стандартний аналіз", de: "Standard-Analyse",    fr: "Analyse standard",   pl: "Standardowa analiza" },
   { value: "seo",      en: "SEO Focus",          uk: "SEO-фокус",          de: "SEO-Fokus",             fr: "Focus SEO",           pl: "Skupienie na SEO" },
   { value: "deep",     en: "Deep Content Audit", uk: "Глибокий аудит",     de: "Tiefer Inhaltsaudit",   fr: "Audit approfondi",    pl: "Głęboki audyt treści" },
+];
+
+// AI model selector — "openai" (faster, gpt-4o-mini) vs "anthropic" (Claude, improved quality)
+const AI_MODELS: Array<{
+  value: AiProvider;
+  labelKey: "aiModelStandard" | "aiModelImproved";
+  descKey: "aiModelStandardDesc" | "aiModelImprovedDesc";
+}> = [
+  { value: "openai",    labelKey: "aiModelStandard", descKey: "aiModelStandardDesc" },
+  { value: "anthropic", labelKey: "aiModelImproved", descKey: "aiModelImprovedDesc" },
 ];
 
 // Maps UI lang code → full language name sent to the AI
@@ -394,6 +405,7 @@ function SidebarContent({
             </Select>
           </div>
         )}
+
         {collapsed && (
           <div className="flex justify-center">
             <Layers className="h-4 w-4 text-muted-foreground/60" />
@@ -767,13 +779,13 @@ function AnalysisPanel({
 
         <Tabs defaultValue="overview">
           <TabsList className="w-full">
-            <TabsTrigger value="overview" className="flex-1">{t.overview}</TabsTrigger>
-            <TabsTrigger value="seo" className="flex-1">{t.seoKeywords}</TabsTrigger>
+            <TabsTrigger value="overview" className="flex-1 px-1 text-[11px] sm:px-1.5 sm:text-sm">{t.overview}</TabsTrigger>
+            <TabsTrigger value="seo" className="flex-1 px-1 text-[11px] sm:px-1.5 sm:text-sm">{t.seoKeywords}</TabsTrigger>
             {result.boardOfDirectors && (
-              <TabsTrigger value="board" className="flex-1">{t.aiBoard}</TabsTrigger>
+              <TabsTrigger value="board" className="flex-1 px-1 text-[11px] sm:px-1.5 sm:text-sm">{t.aiBoard}</TabsTrigger>
             )}
             {tasks !== null && (
-              <TabsTrigger value="action-plan" className="flex-1">📋 {t.actionPlan}</TabsTrigger>
+              <TabsTrigger value="action-plan" className="flex-1 px-1 text-[11px] sm:px-1.5 sm:text-sm">📋 {t.actionPlan}</TabsTrigger>
             )}
           </TabsList>
 
@@ -1057,6 +1069,7 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [platformMode, setPlatformMode] = useState<string>("standard");
+  const [aiProvider, setAiProvider] = useState<AiProvider>("openai");
 
   // — History fetch
   const fetchHistory = useCallback(async () => {
@@ -1178,7 +1191,7 @@ export default function Home() {
         const res = await fetch("/api/analyze", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ url: url1.trim(), language: LANG_NAMES[uiLang] }),
+          body:    JSON.stringify({ url: url1.trim(), language: LANG_NAMES[uiLang], aiProvider }),
         });
         const data: ApiResponse<AnalysisResult> = await res.json();
         if (data.success && data.data) {
@@ -1441,7 +1454,7 @@ export default function Home() {
                   </AnimatePresence>
 
                   {/* Toolbar */}
-                  <div className="flex items-center justify-between gap-2 border-t border-border/25 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/25 px-3 py-2">
                     {/* Left: mode toggles */}
                     <div className="flex items-center gap-1.5">
                       {/* Battle Mode */}
@@ -1450,7 +1463,7 @@ export default function Home() {
                         onClick={toggleBattleMode}
                         disabled={loading}
                         className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5",
+                          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 sm:px-3",
                           "text-xs font-medium transition-all duration-200",
                           isBattleMode
                             ? "bg-violet-600 text-white shadow-sm shadow-violet-500/30"
@@ -1459,7 +1472,7 @@ export default function Home() {
                         )}
                       >
                         <Swords className="h-3 w-3" />
-                        {t.battleMode}
+                        <span className="hidden sm:inline">{t.battleMode}</span>
                       </button>
 
                       {/* Vision Mode */}
@@ -1468,7 +1481,7 @@ export default function Home() {
                         onClick={toggleVisionMode}
                         disabled={loading}
                         className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5",
+                          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 sm:px-3",
                           "text-xs font-medium transition-all duration-200",
                           isVisionMode
                             ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/30"
@@ -1477,43 +1490,83 @@ export default function Home() {
                         )}
                       >
                         <Eye className="h-3 w-3" />
-                        {t.visionMode ?? "AI Vision"}
+                        <span className="hidden sm:inline">{t.visionMode ?? "AI Vision"}</span>
                       </button>
                     </div>
 
-                    {/* Submit button */}
-                    <button
-                      type="submit"
-                      disabled={
-                        loading ||
-                        (isBattleMode ? (!url1.trim() || !url2.trim()) : !url1.trim())
-                      }
-                      className={cn(
-                        "rounded-[1.4rem] px-5 py-2.5",
-                        isVisionMode
-                          ? "bg-indigo-600 hover:bg-indigo-700 shadow-sm shadow-indigo-500/20"
-                          : isBattleMode
-                            ? "bg-violet-600 hover:bg-violet-700 shadow-sm shadow-violet-500/20"
-                            : "bg-primary hover:opacity-90",
-                        "text-primary-foreground text-sm font-semibold tracking-wide",
-                        "transition-all duration-200",
-                        "active:scale-[0.97]",
-                        "disabled:opacity-35 disabled:cursor-not-allowed",
-                        "inline-flex items-center gap-2",
-                      )}
-                    >
-                      {loading ? (
-                        <><Loader2 className="h-4 w-4 animate-spin" />
-                          {isVisionMode ? (t.visionAnalyzing ?? "Analyzing…") : isBattleMode ? t.battling : t.analyzing}
-                        </>
-                      ) : isVisionMode ? (
-                        <><Eye className="h-3.5 w-3.5" />{t.visionMode ?? "AI Vision"}</>
-                      ) : isBattleMode ? (
-                        <><Swords className="h-3.5 w-3.5" />{t.startBattle}</>
-                      ) : (
-                        t.analyze
-                      )}
-                    </button>
+                    {/* Right: AI model picker + submit */}
+                    <div className="flex items-center gap-2">
+                      {/* AI Model — GPT (standard) vs Claude (improved) */}
+                      <Select value={aiProvider} onValueChange={(v) => v && setAiProvider(v as AiProvider)}>
+                        <SelectTrigger
+                          className={cn(
+                            "h-[34px] gap-1.5 rounded-full border-border/60 bg-transparent px-2.5 text-xs font-medium text-muted-foreground sm:px-3",
+                            "hover:border-violet-400/60 hover:text-violet-400 dark:bg-transparent dark:hover:bg-transparent",
+                          )}
+                        >
+                          <Sparkles className="h-3 w-3 shrink-0" />
+                          <SelectValue className="hidden sm:flex">
+                            {(value: AiProvider) =>
+                              t[AI_MODELS.find((m) => m.value === value)?.labelKey ?? "aiModelStandard"]
+                            }
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent align="end" className="min-w-56">
+                          {AI_MODELS.map((m) => (
+                            <SelectItem key={m.value} value={m.value} className="py-2">
+                              <span className="flex flex-1 items-center gap-2.5">
+                                <span className={cn(
+                                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+                                  m.value === "anthropic"
+                                    ? "bg-amber-500/10 text-amber-500"
+                                    : "bg-emerald-500/10 text-emerald-500",
+                                )}>
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                </span>
+                                <span className="flex flex-col">
+                                  <span className="text-sm font-medium text-foreground">{t[m.labelKey]}</span>
+                                  <span className="text-[11px] text-muted-foreground">{t[m.descKey]}</span>
+                                </span>
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      {/* Submit button */}
+                      <button
+                        type="submit"
+                        disabled={
+                          loading ||
+                          (isBattleMode ? (!url1.trim() || !url2.trim()) : !url1.trim())
+                        }
+                        className={cn(
+                          "rounded-[1.4rem] px-5 py-2.5",
+                          isVisionMode
+                            ? "bg-indigo-600 hover:bg-indigo-700 shadow-sm shadow-indigo-500/20"
+                            : isBattleMode
+                              ? "bg-violet-600 hover:bg-violet-700 shadow-sm shadow-violet-500/20"
+                              : "bg-primary hover:opacity-90",
+                          "text-primary-foreground text-sm font-semibold tracking-wide",
+                          "transition-all duration-200",
+                          "active:scale-[0.97]",
+                          "disabled:opacity-35 disabled:cursor-not-allowed",
+                          "inline-flex items-center gap-2",
+                        )}
+                      >
+                        {loading ? (
+                          <><Loader2 className="h-4 w-4 animate-spin" />
+                            {isVisionMode ? (t.visionAnalyzing ?? "Analyzing…") : isBattleMode ? t.battling : t.analyzing}
+                          </>
+                        ) : isVisionMode ? (
+                          <><Eye className="h-3.5 w-3.5" />{t.visionMode ?? "AI Vision"}</>
+                        ) : isBattleMode ? (
+                          <><Swords className="h-3.5 w-3.5" />{t.startBattle}</>
+                        ) : (
+                          t.analyze
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               </form>

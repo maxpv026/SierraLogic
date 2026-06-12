@@ -54,6 +54,7 @@ export interface AnalysisResult {
   scrapedText?:      string;  // raw page text, used as chat context
   boardOfDirectors?: BoardData;
   cached?:           boolean; // true if served from the 24h analysis cache
+  aiProvider?:       string;  // "openai" | "anthropic" — which model produced this analysis
 }
 
 export interface ApiResponse<T = unknown> {

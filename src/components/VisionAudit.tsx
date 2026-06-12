@@ -176,7 +176,7 @@ function ActionableFixes({ fixes }: { fixes: VisionResult["actionableFixes"] }) 
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, delay: i * 0.06 }}
-            className="grid grid-cols-[auto_1fr_1fr] gap-3 rounded-xl border border-border/40 bg-background/30 p-3.5"
+            className="grid grid-cols-1 gap-3 rounded-xl border border-border/40 bg-background/30 p-3.5 sm:grid-cols-[auto_1fr_1fr]"
           >
             {/* Priority badge */}
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-xs font-bold tabular-nums text-amber-500">

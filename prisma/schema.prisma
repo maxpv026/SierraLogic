@@ -108,6 +108,7 @@ model AnalysisResult {
   scrapedText      String? @db.Text
   boardOfDirectors Json?
   cachedTasks      Json?
+  aiProvider       String  @default("openai")
 
   @@index([userId])
   @@index([url, language, createdAt])
