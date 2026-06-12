@@ -880,8 +880,13 @@ function AnalysisPanel({
         </Tabs>
 
         <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground/60">
-            {t.analyzed} {new Date(result.createdAt).toLocaleString()}
+          <p className="flex items-center gap-2 text-xs text-muted-foreground/60">
+            <span>{t.analyzed} {new Date(result.createdAt).toLocaleString()}</span>
+            {result.cached && (
+              <Badge variant="secondary" className="text-[10px] font-normal">
+                {t.cachedResult}
+              </Badge>
+            )}
           </p>
           {/* Action buttons row */}
           <div className="flex gap-2">

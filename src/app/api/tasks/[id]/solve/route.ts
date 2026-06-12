@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession }          from "next-auth";
 import { authOptions }               from "@/lib/auth";
 import { prisma }                    from "@/lib/prisma";
-import { openai }                    from "@/lib/ai";
+import { streamChatText }            from "@/lib/ai";
 
 const SYSTEM_PROMPT = `You are an expert Web Developer, SEO Specialist, and UX Engineer.
 Your job is to provide the EXACT code, HTML, React component, copy, or configuration needed to fix the described issue.
@@ -48,18 +48,15 @@ export async function POST(
     `Problem: ${task.description}` +
     context;
 
-  // Stream with the native OpenAI SDK so solution is saved once streaming completes
-  let stream: Awaited<ReturnType<typeof openai.chat.completions.create>>;
+  // Stream the response so the solution is saved once streaming completes.
+  // Falls back to Anthropic Claude internally if OpenAI is unavailable.
+  let stream: AsyncIterable<string>;
   try {
-    stream = await openai.chat.completions.create({
-      model:       "gpt-4o-mini",
-      stream:      true,
-      max_tokens:  1024,
+    stream = await streamChatText({
+      system:     SYSTEM_PROMPT,
+      user:       userPrompt,
+      maxTokens:  1024,
       temperature: 0.25,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user",   content: userPrompt },
-      ],
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "AI generation failed";
@@ -73,8 +70,7 @@ export async function POST(
   const readable = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        for await (const chunk of stream) {
-          const delta = chunk.choices[0]?.delta?.content ?? "";
+        for await (const delta of stream) {
           if (delta) {
             fullText += delta;
             controller.enqueue(encoder.encode(delta));

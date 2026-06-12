@@ -6,11 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "finetune:export": "tsx scripts/export-finetune-dataset.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.63",
     "@ai-sdk/react": "^3.0.184",
+    "@anthropic-ai/sdk": "^0.104.1",
     "@auth/prisma-adapter": "^2.11.2",
     "@base-ui/react": "^1.4.1",
     "@hookform/resolvers": "^5.2.2",
@@ -56,6 +58,7 @@
     "eslint-config-next": "16.2.6",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
+    "tsx": "^4.22.4",
     "typescript": "^5"
   }
 }

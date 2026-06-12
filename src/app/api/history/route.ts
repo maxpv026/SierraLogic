@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import type { ApiResponse, AnalysisResult, Sentiment } from "@/types";
+import type { ApiResponse, AnalysisResult, BoardData, Sentiment } from "@/types";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -24,7 +24,12 @@ export async function GET() {
 
     const data: AnalysisResult[] = records.map((r) => ({
       ...r,
-      sentiment: r.sentiment as Sentiment,
+      sentiment:        r.sentiment as Sentiment,
+      sentimentScore:   r.sentimentScore   ?? undefined,
+      category:         r.category         ?? undefined,
+      designStyle:      r.designStyle      ?? undefined,
+      scrapedText:      r.scrapedText      ?? undefined,
+      boardOfDirectors: (r.boardOfDirectors as unknown as BoardData) ?? undefined,
     }));
 
     return NextResponse.json<ApiResponse<AnalysisResult[]>>({ success: true, data });

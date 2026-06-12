@@ -7,9 +7,6 @@
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Stage 1 — deps
-# Install ALL npm dependencies (dev + prod) so the builder stage can:
-#   • run  npx prisma generate  (needs Prisma CLI from devDeps)
-#   • run  npm run build        (needs Next.js, TypeScript, etc.)
 # ───────────────────────────────────────────────────────────────────────────────
 FROM node:20-alpine AS deps
 WORKDIR /app
@@ -24,10 +21,6 @@ RUN npm ci
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Stage 2 — builder
-# 1. Copy source code from the build context
-# 2. Generate the Prisma client for the Alpine Linux runtime
-#    (bakes the correct query-engine binary into /app/src/generated/prisma)
-# 3. Compile the Next.js application
 # ───────────────────────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 WORKDIR /app
@@ -51,14 +44,6 @@ RUN npm run build
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Stage 3 — runner
-# The final, minimal image that will actually be deployed.
-# Contains ONLY what is needed to run the application:
-#   .next/          — compiled Next.js bundles & server
-#   node_modules/   — runtime dependencies
-#   public/         — static assets served directly
-#   src/generated/  — Prisma generated client with Alpine-native binary
-#   next.config.ts  — loaded by Next.js server at startup
-#   package.json    — required by `npm start`
 # ───────────────────────────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 WORKDIR /app

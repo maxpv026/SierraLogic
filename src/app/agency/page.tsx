@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeft, Briefcase, Lock, Sparkles, Loader2,
   Copy, CheckCheck, CheckCircle2, Circle, Star,
-  AlertTriangle, Trash2, RefreshCw,
+  AlertTriangle, Trash2, RefreshCw, Upload,
+  ThumbsUp, ThumbsDown,
 } from "lucide-react";
 import { useLang } from "@/lib/i18n-context";
 import type { AgencyLead, LeadStatus } from "@/types";
@@ -38,6 +39,14 @@ interface AgencyT {
   reset: string;
   errorStatus: string;
   errorDelete: string;
+  exportHubspot: string;
+  exportedHubspot: string;
+  errorHubspot: string;
+  feedbackPrompt: string;
+  feedbackGood: string;
+  feedbackBad: string;
+  feedbackSent: string;
+  errorFeedback: string;
   paywallTitle: string;
   paywallPremium: string;
   paywallDesc: string;
@@ -68,6 +77,14 @@ const AGENCY_LABELS: Record<Lang, AgencyT> = {
     reset: "Reset",
     errorStatus: "Failed to update lead status.",
     errorDelete: "Failed to delete lead.",
+    exportHubspot: "Export to HubSpot",
+    exportedHubspot: "Exported to HubSpot!",
+    errorHubspot: "Failed to export to HubSpot.",
+    feedbackPrompt: "Was this email good?",
+    feedbackGood: "Good draft",
+    feedbackBad: "Needs work",
+    feedbackSent: "Thanks for the feedback!",
+    errorFeedback: "Failed to send feedback.",
     paywallTitle: "Agency Lead Machine",
     paywallPremium: "Premium Feature",
     paywallDesc: "Bulk-analyze competitor websites, identify their critical flaws, and auto-generate highly personalized cold emails. Close more deals on autopilot.",
@@ -96,6 +113,14 @@ const AGENCY_LABELS: Record<Lang, AgencyT> = {
     reset: "Скинути",
     errorStatus: "Не вдалося оновити статус ліда.",
     errorDelete: "Не вдалося видалити лід.",
+    exportHubspot: "Експорт у HubSpot",
+    exportedHubspot: "Експортовано в HubSpot!",
+    errorHubspot: "Не вдалося експортувати в HubSpot.",
+    feedbackPrompt: "Чи вдалий цей лист?",
+    feedbackGood: "Гарний варіант",
+    feedbackBad: "Потребує правок",
+    feedbackSent: "Дякуємо за відгук!",
+    errorFeedback: "Не вдалося надіслати відгук.",
     paywallTitle: "Машина лідогенерації",
     paywallPremium: "Преміум функція",
     paywallDesc: "Масовий аналіз сайтів конкурентів, виявлення критичних недоліків та автоматична генерація персоналізованих холодних листів.",
@@ -124,6 +149,14 @@ const AGENCY_LABELS: Record<Lang, AgencyT> = {
     reset: "Zurücksetzen",
     errorStatus: "Status konnte nicht aktualisiert werden.",
     errorDelete: "Lead konnte nicht gelöscht werden.",
+    exportHubspot: "Zu HubSpot exportieren",
+    exportedHubspot: "Nach HubSpot exportiert!",
+    errorHubspot: "Export zu HubSpot fehlgeschlagen.",
+    feedbackPrompt: "War diese E-Mail gut?",
+    feedbackGood: "Guter Entwurf",
+    feedbackBad: "Braucht Überarbeitung",
+    feedbackSent: "Danke für Ihr Feedback!",
+    errorFeedback: "Feedback konnte nicht gesendet werden.",
     paywallTitle: "Agency Lead Machine",
     paywallPremium: "Premium-Funktion",
     paywallDesc: "Analysieren Sie Websites von Mitbewerbern, erkennen Sie kritische Schwächen und generieren Sie automatisch personalisierte Kalt-E-Mails.",
@@ -152,6 +185,14 @@ const AGENCY_LABELS: Record<Lang, AgencyT> = {
     reset: "Réinitialiser",
     errorStatus: "Impossible de mettre à jour le statut.",
     errorDelete: "Impossible de supprimer le lead.",
+    exportHubspot: "Exporter vers HubSpot",
+    exportedHubspot: "Exporté vers HubSpot !",
+    errorHubspot: "Échec de l'export vers HubSpot.",
+    feedbackPrompt: "Cet email était-il réussi ?",
+    feedbackGood: "Bon brouillon",
+    feedbackBad: "À améliorer",
+    feedbackSent: "Merci pour votre retour !",
+    errorFeedback: "Échec de l'envoi du retour.",
     paywallTitle: "Agency Lead Machine",
     paywallPremium: "Fonctionnalité Premium",
     paywallDesc: "Analysez en masse les sites des concurrents, identifiez leurs failles critiques et générez automatiquement des emails personnalisés.",
@@ -180,6 +221,14 @@ const AGENCY_LABELS: Record<Lang, AgencyT> = {
     reset: "Resetuj",
     errorStatus: "Nie udało się zaktualizować statusu.",
     errorDelete: "Nie udało się usunąć leada.",
+    exportHubspot: "Eksportuj do HubSpot",
+    exportedHubspot: "Wyeksportowano do HubSpot!",
+    errorHubspot: "Nie udało się wyeksportować do HubSpot.",
+    feedbackPrompt: "Czy ten email był dobry?",
+    feedbackGood: "Dobry szkic",
+    feedbackBad: "Wymaga poprawek",
+    feedbackSent: "Dzięki za opinię!",
+    errorFeedback: "Nie udało się wysłać opinii.",
     paywallTitle: "Maszyna do pozyskiwania leadów",
     paywallPremium: "Funkcja Premium",
     paywallDesc: "Masowa analiza stron konkurentów, wykrywanie krytycznych błędów i automatyczne generowanie spersonalizowanych cold maili.",
@@ -276,8 +325,11 @@ function LeadCard({
   onDelete:       (id: string) => void;
 }) {
   const t = useAgencyT();
-  const [copied,   setCopied]   = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [copied,    setCopied]    = useState(false);
+  const [expanded,  setExpanded]  = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [feedback,  setFeedback]  = useState<"good" | "bad" | null>(null);
+  const [sendingFeedback, setSendingFeedback] = useState(false);
   const meta = STATUS_META[lead.status];
 
   // Translated status label
@@ -315,6 +367,40 @@ function LeadCard({
       await fetch(`/api/agency/leads/${lead.id}`, { method: "DELETE" });
     } catch {
       toast.error(t.errorDelete);
+    }
+  }
+
+  async function exportToHubspot() {
+    setExporting(true);
+    try {
+      const res  = await fetch(`/api/agency/leads/${lead.id}/hubspot`, { method: "POST" });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error ?? "Export failed");
+      toast.success(t.exportedHubspot);
+    } catch {
+      toast.error(t.errorHubspot);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function sendFeedback(rating: "good" | "bad") {
+    if (feedback || sendingFeedback) return;
+    setSendingFeedback(true);
+    try {
+      const res  = await fetch(`/api/agency/leads/${lead.id}/feedback`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ rating }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error ?? "Feedback failed");
+      setFeedback(rating);
+      toast.success(t.feedbackSent);
+    } catch {
+      toast.error(t.errorFeedback);
+    } finally {
+      setSendingFeedback(false);
     }
   }
 
@@ -388,6 +474,39 @@ function LeadCard({
         </button>
       </div>
 
+      {/* Email quality feedback — feeds the future fine-tuning corpus */}
+      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>{feedback ? t.feedbackSent : t.feedbackPrompt}</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => sendFeedback("good")}
+            disabled={!!feedback || sendingFeedback}
+            title={t.feedbackGood}
+            className={cn(
+              "inline-flex items-center justify-center rounded-lg border p-1.5 transition-all duration-200 disabled:opacity-40",
+              feedback === "good"
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                : "border-border/50 bg-muted/30 text-foreground hover:bg-muted",
+            )}
+          >
+            <ThumbsUp className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => sendFeedback("bad")}
+            disabled={!!feedback || sendingFeedback}
+            title={t.feedbackBad}
+            className={cn(
+              "inline-flex items-center justify-center rounded-lg border p-1.5 transition-all duration-200 disabled:opacity-40",
+              feedback === "bad"
+                ? "border-rose-500/30 bg-rose-500/10 text-rose-400"
+                : "border-border/50 bg-muted/30 text-foreground hover:bg-muted",
+            )}
+          >
+            <ThumbsDown className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
       {/* Actions */}
       <div className="flex items-center gap-2">
         <button
@@ -420,6 +539,22 @@ function LeadCard({
           {lead.status === "DRAFT"     && <><CheckCircle2 className="h-3.5 w-3.5" />{t.markContacted}</>}
           {lead.status === "CONTACTED" && <><Star className="h-3.5 w-3.5" />{t.markConverted}</>}
           {lead.status === "CONVERTED" && <><RefreshCw className="h-3.5 w-3.5" />{t.reset}</>}
+        </button>
+
+        <button
+          onClick={exportToHubspot}
+          disabled={exporting}
+          title={t.exportHubspot}
+          className={cn(
+            "inline-flex items-center justify-center rounded-xl border p-2",
+            "text-xs font-semibold transition-all duration-200",
+            "border-orange-500/30 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20",
+            "disabled:opacity-50",
+          )}
+        >
+          {exporting
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <Upload className="h-3.5 w-3.5" />}
         </button>
       </div>
     </motion.div>

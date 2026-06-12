@@ -4,39 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession }          from "next-auth";
 import { authOptions }               from "@/lib/auth";
 import { prisma }                    from "@/lib/prisma";
-import { openai }                    from "@/lib/ai";
+import { chatJSON }                  from "@/lib/ai";
 import { scrapeWebsite }             from "@/services/scraper";
 import type { ApiResponse, AgencyLead, LeadFlaw } from "@/types";
-import { LANG_NAMES } from "@/lib/i18n";
+import { buildAgencyLeadSystemPrompt } from "@/lib/prompts/agency";
 
 const MAX_URLS = 10;
-
-const SYSTEM_PROMPT_BASE = `You are an elite B2B Sales Copywriter and Tech Auditor working for a web agency.
-Analyze the provided website content. Return ONLY a valid JSON object — no markdown, no explanation.
-
-{
-  "companyName": "<inferred company or brand name, or null if unclear>",
-  "identifiedFlaws": [
-    { "title": "<short flaw label, e.g. 'Missing Meta Tags'>", "description": "<1 sentence explaining the business impact>" },
-    { "title": "<second critical flaw>", "description": "<1 sentence business impact>" }
-  ],
-  "coldEmailDraft": "<full cold email including subject line. Use this exact format:\nSubject: [compelling subject line]\n\n[Greeting],\n\n[Hook paragraph — mention 1-2 specific flaws found]\n\n[Value proposition — what your agency will achieve]\n\n[Call to action — short, low-friction]\n\nBest,\n[Your Name]\n[Your Agency]>"
-}
-
-Rules:
-- identifiedFlaws: EXACTLY 2 items, high-impact, specific to this site's content
-- coldEmailDraft: under 180 words total, professional but not salesy, highly personalised
-- Mention the specific flaws you found as the hook — never generic
-- CTA should be soft (e.g. "Would you be open to a 15-minute call?")`;
-
-function buildSystemPrompt(language: string): string {
-  const langName = LANG_NAMES[language as keyof typeof LANG_NAMES] ?? language;
-  return (
-    SYSTEM_PROMPT_BASE +
-    `\n\nCRITICAL: You must generate the entire response, including the "identifiedFlaws" descriptions ` +
-    `and the "coldEmailDraft", STRICTLY in ${langName}. Do not use any other language.`
-  );
-}
 
 function parseLeadResponse(raw: string): { companyName: string | null; flaws: LeadFlaw[]; emailDraft: string } {
   const cleaned = raw.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
@@ -115,7 +88,7 @@ export async function POST(req: NextRequest) {
   // Language for AI output: client payload → DB user language → "en"
   const rawLang = typeof b?.language === "string" ? b.language.trim() : null;
   const language = rawLang ?? dbUser?.language ?? "en";
-  const systemPrompt = buildSystemPrompt(language);
+  const systemPrompt = buildAgencyLeadSystemPrompt(language);
 
   const rawUrls = b?.urls;
   if (!Array.isArray(rawUrls) || rawUrls.length === 0) {
@@ -154,17 +127,13 @@ export async function POST(req: NextRequest) {
       if (r.status !== "fulfilled") throw new Error(`Scrape failed: ${(r.reason as Error).message}`);
       const { url, text } = r.value;
 
-      const completion = await openai.chat.completions.create({
-        model:           "gpt-4o-mini",
-        response_format: { type: "json_object" },
-        temperature:     0.35,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user",   content: `Website URL: ${url}\n\nScraped content:\n${text}` },
-        ],
+      const raw = await chatJSON({
+        system: systemPrompt,
+        user:   `Website URL: ${url}\n\nScraped content:\n${text}`,
+        temperature: 0.35,
+        // Use a model fine-tuned on our B2B cold-email corpus if one has been trained
+        model: process.env.FINETUNED_EMAIL_MODEL || "gpt-4o-mini",
       });
-
-      const raw = completion.choices[0]?.message?.content ?? "{}";
       const { companyName, flaws, emailDraft } = parseLeadResponse(raw);
 
       return { url, companyName, flaws, emailDraft };

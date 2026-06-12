@@ -1,4 +1,4 @@
-import { openai } from "@/lib/ai";
+import { chatJSON } from "@/lib/ai";
 import type {
   Sentiment, BoardData,
   SeoAgentResult, MarketingAgentResult, UxAgentResult,
@@ -171,29 +171,20 @@ export async function analyzeContent(
   const langNote    = `\nIMPORTANT: Write ALL text fields in ${language}. Do not mix languages.`;
   const userContent = `${langNote}\n\nCONTENT:\n${input}`;
 
-  const call = (system: string) =>
-    openai.chat.completions.create({
-      model:           "gpt-4o-mini",
-      response_format: { type: "json_object" },
-      temperature:     0.2,
-      messages: [
-        { role: "system", content: system },
-        { role: "user",   content: userContent },
-      ],
-    });
+  const call = (system: string) => chatJSON({ system, user: userContent, temperature: 0.2 });
 
   // Fan-out: all 4 agents run concurrently
-  const [seoRes, mktRes, uxRes, taskRes] = await Promise.all([
+  const [seoRaw, mktRaw, uxRaw, taskRaw] = await Promise.all([
     call(SEO_SYSTEM),
     call(MARKETING_SYSTEM),
     call(UX_SYSTEM),
     call(TASK_SYSTEM),
   ]);
 
-  const seo   = parseSeo(seoRes.choices[0]?.message?.content   ?? "{}");
-  const mkt   = parseMarketing(mktRes.choices[0]?.message?.content ?? "{}");
-  const ux    = parseUx(uxRes.choices[0]?.message?.content     ?? "{}");
-  const tasks = parseTasks(taskRes.choices[0]?.message?.content ?? "{}");
+  const seo   = parseSeo(seoRaw);
+  const mkt   = parseMarketing(mktRaw);
+  const ux    = parseUx(uxRaw);
+  const tasks = parseTasks(taskRaw);
 
   return {
     topics:         seo.topics.length ? seo.topics : ["General"],

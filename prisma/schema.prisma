@@ -100,6 +100,29 @@ model AnalysisResult {
   createdAt DateTime @default(now())
   user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // ── 24h cache fields — let repeat analyses of the same URL skip scrape + AI calls ──
+  language         String  @default("en")
+  sentimentScore   Int?
+  category         String?
+  designStyle      String?
+  scrapedText      String? @db.Text
+  boardOfDirectors Json?
+  cachedTasks      Json?
+
+  @@index([userId])
+  @@index([url, language, createdAt])
+}
+
+model EmailFeedback {
+  id           String   @id @default(cuid())
+  leadId       String?
+  url          String
+  emailDraft   String   @db.Text
+  editedDraft  String?  @db.Text
+  rating       String   // "good" | "bad"
+  userId       String
+  createdAt    DateTime @default(now())
+
   @@index([userId])
 }
 

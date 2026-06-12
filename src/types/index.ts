@@ -53,6 +53,7 @@ export interface AnalysisResult {
   designStyle?:      string;
   scrapedText?:      string;  // raw page text, used as chat context
   boardOfDirectors?: BoardData;
+  cached?:           boolean; // true if served from the 24h analysis cache
 }
 
 export interface ApiResponse<T = unknown> {

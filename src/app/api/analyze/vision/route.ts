@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse }  from "next/server";
-import { openai }                     from "@/lib/ai";
+import { chatVisionJSON }             from "@/lib/ai";
 import { captureScreenshot }          from "@/lib/screenshot";
 import type { ApiResponse, VisionResult, VisionFix } from "@/types";
 
@@ -134,35 +134,14 @@ export async function POST(req: NextRequest) {
   // 2. VLM analysis via gpt-4o vision
   let result: VisionResult;
   try {
-    const completion = await openai.chat.completions.create({
-      model:       "gpt-4o",
-      max_tokens:  2048,
+    const raw = await chatVisionJSON({
+      system: systemPromptWithLang,
+      user:   `Perform a full UX/UI/CRO audit of this website: ${url}\n\nAnalyze the screenshot carefully and return the structured JSON report.`,
+      imageUrl:  screenshotUrl,
+      maxTokens: 2048,
       temperature: 0.3,
-      messages: [
-        { role: "system", content: systemPromptWithLang },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Perform a full UX/UI/CRO audit of this website: ${url}\n\nAnalyze the screenshot carefully and return the structured JSON report.`,
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url:    screenshotUrl,
-                detail: "high",
-              },
-            },
-          ],
-        },
-      ],
     });
-
-    const raw = completion.choices[0]?.message?.content ?? "";
-    // Strip markdown fences if model wraps in ```json
-    const cleaned = raw.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
-    result = parseVisionResult(cleaned, url, screenshotUrl);
+    result = parseVisionResult(raw, url, screenshotUrl);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "AI vision analysis failed";
     return NextResponse.json<ApiResponse>({ success: false, error: msg }, { status: 502 });

@@ -10,7 +10,12 @@ import { authOptions } from "@/lib/auth";
 import { scrapeWebsite } from "@/services/scraper";
 import { analyzeContent } from "@/services/ai-analyzer";
 import { prisma } from "@/lib/prisma";
-import type { ApiResponse, AnalysisResult } from "@/types";
+import type { Prisma } from "@/generated/prisma/client";
+import type { ApiResponse, AnalysisResult, BoardData, TaskInput } from "@/types";
+
+// Repeat analyses of the same URL (+ output language) within this window are
+// served from the DB instead of re-scraping and re-running the 4 AI agents.
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function parseUrl(raw: unknown): URL | null {
   if (typeof raw !== "string" || !raw.trim()) return null;
@@ -53,6 +58,51 @@ export async function POST(req: NextRequest) {
   }
 
   const url = parsedUrl.toString();
+  const cacheLang = language ?? "en";
+
+  // --- Cache lookup (24h TTL) ---
+  const cached = await prisma.analysisResult.findFirst({
+    where: {
+      url,
+      language:  cacheLang,
+      createdAt: { gte: new Date(Date.now() - CACHE_TTL_MS) },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (cached?.boardOfDirectors && cached.scrapedText) {
+    const cachedTasks = (cached.cachedTasks as unknown as TaskInput[] | null) ?? [];
+
+    if (userId && cachedTasks.length > 0) {
+      await prisma.task.createMany({
+        data: cachedTasks.map((t) => ({
+          title:          t.title,
+          description:    t.description,
+          category:       t.category,
+          priority:       t.priority,
+          status:         "TODO",
+          userId,
+          websiteContext: cached.scrapedText!.slice(0, 4_000),
+        })),
+      }).catch(() => {});
+    }
+
+    const response: AnalysisResult = {
+      ...cached,
+      sentiment:        cached.sentiment as AnalysisResult["sentiment"],
+      sentimentScore:   cached.sentimentScore ?? undefined,
+      category:         cached.category ?? undefined,
+      designStyle:      cached.designStyle ?? undefined,
+      scrapedText:      cached.scrapedText,
+      boardOfDirectors: cached.boardOfDirectors as unknown as BoardData,
+      cached:           true,
+    };
+
+    return NextResponse.json<ApiResponse<AnalysisResult>>(
+      { success: true, data: response },
+      { status: 200 },
+    );
+  }
 
   // --- Scrape ---
   const scraped = await scrapeWebsite(url);
@@ -87,6 +137,14 @@ export async function POST(req: NextRequest) {
           summary:   analysis.summary,
           keywords:  analysis.keywords,
           ...(userId ? { userId } : {}),
+          // Cache fields — let repeat analyses of this URL skip scrape + AI calls for 24h
+          language:         cacheLang,
+          sentimentScore:   analysis.sentimentScore,
+          category:         analysis.category,
+          designStyle:      analysis.designStyle,
+          scrapedText:      scraped.text,
+          boardOfDirectors: analysis.boardOfDirectors as unknown as Prisma.InputJsonValue,
+          cachedTasks:      analysis.tasks as unknown as Prisma.InputJsonValue,
         },
       }),
       // Save AI-generated tasks with website context (for the AI fix generator)
@@ -123,6 +181,7 @@ export async function POST(req: NextRequest) {
     designStyle:      analysis.designStyle,
     scrapedText:      scraped.text,
     boardOfDirectors: analysis.boardOfDirectors,
+    cached:           false,
   };
 
   return NextResponse.json<ApiResponse<AnalysisResult>>(

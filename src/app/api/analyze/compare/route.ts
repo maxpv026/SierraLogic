@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { openai }          from "@/lib/ai";
+import { chatJSON }        from "@/lib/ai";
 import { scrapeWebsite }   from "@/services/scraper";
 import type { ApiResponse, CompareResult, RadarDataPoint } from "@/types";
 
@@ -125,17 +125,7 @@ export async function POST(req: NextRequest) {
 
   let result: CompareResult;
   try {
-    const completion = await openai.chat.completions.create({
-      model:           "gpt-4o-mini",
-      response_format: { type: "json_object" },
-      temperature:     0.2,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user",   content: userPrompt },
-      ],
-    });
-
-    const raw = completion.choices[0]?.message?.content ?? "";
+    const raw = await chatJSON({ system: SYSTEM_PROMPT, user: userPrompt, temperature: 0.2 });
     result = parseCompareResult(raw);
     result.site1Url = url1;
     result.site2Url = url2;
